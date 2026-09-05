@@ -19,7 +19,7 @@
     "memory_safety_percent": 20
   },
   "metrics": {
-    "aggregation": "mean across 3 samples; all reported sample standard deviations are zero except host_wall_ms",
+    "aggregation": "mean across 3 samples; per-sample values for key PSP metrics are recorded below",
     "eval_us": 364116,
     "boot_to_frame0_us": 611557,
     "avg_frame_interval_us": 16913,
@@ -35,7 +35,13 @@
     "arena_tail_free_bytes": 15549280,
     "bundle_bytes": 136699,
     "pak_bytes": 207488,
-    "host_wall_ms": 573.748695
+    "host_wall_ms": 573.748695,
+    "sample_values": {
+      "avg_work_us": [779, 779, 779],
+      "max_work_us": [28235, 28235, 28235],
+      "avg_render_us": [71, 71, 71],
+      "arena_bump_bytes": [2274208, 2274208, 2274208]
+    }
   },
   "activation": {
     "field": "tileset_uploads",
