@@ -728,26 +728,38 @@ impl Ui {
         let Some(tile) = parse_tileset_tile(blob, index) else {
             return -1;
         };
-        // Reassemble the upload_texture_flags PSM_T8 layout (palette, then
-        // pixel stream) — palette and stream live at unrelated offsets in
-        // the entry.
-        let mut data = Vec::with_capacity(TEX_PALETTE_BYTES + tile.stream.len());
-        data.extend_from_slice(tile.palette);
-        data.extend_from_slice(tile.stream);
-        let mut img_flags = 0u8;
-        if tile.flags & spec::tileset::FLAG_RLE != 0 {
-            img_flags |= spec::img::FLAG_RLE;
+        let byte_len = tile.tile_w as usize * tile.tile_h as usize;
+        let palette = Some(copy_aligned(tile.palette, TEX_PALETTE_BYTES));
+        let chunks = if tile.flags & spec::tileset::FLAG_RLE != 0 {
+            let mut chunks = alloc::vec![0u128; byte_len.div_ceil(16)];
+            let pixels = unsafe {
+                core::slice::from_raw_parts_mut(chunks.as_mut_ptr() as *mut u8, byte_len)
+            };
+            if !codec::packbits_decode(tile.stream, pixels) {
+                return -1;
+            }
+            chunks
+        } else {
+            if tile.stream.len() < byte_len {
+                return -1;
+            }
+            copy_aligned(tile.stream, byte_len)
+        };
+        let tex = Texture {
+            data: chunks,
+            byte_len,
+            w: tile.tile_w,
+            h: tile.tile_h,
+            psm: spec::psm::PSM_T8,
+            palette,
+            linear: tile.flags & spec::tileset::FLAG_LINEAR != 0,
+            revision: 0,
+        };
+        let handle = tex_alloc(&mut self.textures, &mut self.tex_free, tex);
+        if handle >= 0 {
+            self.bump_raster_revision();
         }
-        if tile.flags & spec::tileset::FLAG_LINEAR != 0 {
-            img_flags |= spec::img::FLAG_LINEAR;
-        }
-        self.upload_texture_flags(
-            &data,
-            tile.tile_w,
-            tile.tile_h,
-            spec::psm::PSM_T8,
-            img_flags,
-        )
+        handle
     }
 
     /// Overwrite a live PSM_T8 texture's palette + pixels IN PLACE (the video
