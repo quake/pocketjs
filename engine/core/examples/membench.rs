@@ -375,9 +375,15 @@ struct AssetInputs {
     kinds: Vec<AssetKind>,
 }
 
+const ASSET_FONT_SLOTS: [u8; 2] = [12, 13];
+
 impl AssetInputs {
     fn new() -> Self {
-        let mut blobs = vec![style_blob(), font_atlas_blob(12), font_atlas_blob(13)];
+        let mut blobs = vec![
+            style_blob(),
+            font_atlas_blob(ASSET_FONT_SLOTS[0]),
+            font_atlas_blob(ASSET_FONT_SLOTS[1]),
+        ];
         let mut kinds = vec![AssetKind::Styles, AssetKind::Font, AssetKind::Font];
         for index in 0..8 {
             blobs.push(image_entry(index));
@@ -400,19 +406,55 @@ impl AssetInputs {
     }
 }
 
-fn resource_checksum(inputs: &AssetInputs, handles: &[i32]) -> u64 {
+fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32]) -> u64 {
     let mut checksum: u64 = 0xcbf29ce484222325;
-    for (kind, blob) in inputs.kinds.iter().zip(&inputs.blobs) {
+    assert_eq!(inputs.kinds.len(), handles.len());
+    for (kind, handle) in inputs.kinds.iter().zip(handles) {
         checksum ^= *kind as u8 as u64;
         checksum = checksum.wrapping_mul(0x100000001b3);
-        for byte in blob {
+        match kind {
+            AssetKind::Styles | AssetKind::Font => assert_eq!(*handle, -1),
+            AssetKind::Image | AssetKind::Sprite => {
+                let texture = ui
+                    .texture(*handle)
+                    .expect("asset texture handle must resolve");
+                for value in [texture.w, texture.h, texture.psm] {
+                    for byte in value.to_le_bytes() {
+                        checksum ^= u64::from(byte);
+                        checksum = checksum.wrapping_mul(0x100000001b3);
+                    }
+                }
+                checksum ^= u64::from(texture.linear);
+                checksum = checksum.wrapping_mul(0x100000001b3);
+                for byte in texture.pixels {
+                    checksum ^= u64::from(*byte);
+                    checksum = checksum.wrapping_mul(0x100000001b3);
+                }
+                if let Some(palette) = texture.palette {
+                    for byte in palette {
+                        checksum ^= u64::from(*byte);
+                        checksum = checksum.wrapping_mul(0x100000001b3);
+                    }
+                }
+            }
+        }
+    }
+    for slot in ASSET_FONT_SLOTS {
+        let font = ui.font_atlas(slot).expect("asset font slot must resolve");
+        checksum ^= u64::from(slot);
+        checksum = checksum.wrapping_mul(0x100000001b3);
+        for value in [font.cell_w, font.cell_h, font.glyph_count as u32] {
+            for byte in value.to_le_bytes() {
+                checksum ^= u64::from(byte);
+                checksum = checksum.wrapping_mul(0x100000001b3);
+            }
+        }
+        checksum ^= u64::from(font.raster_density);
+        checksum = checksum.wrapping_mul(0x100000001b3);
+        for byte in &font.bitmap {
             checksum ^= u64::from(*byte);
             checksum = checksum.wrapping_mul(0x100000001b3);
         }
-    }
-    for handle in handles {
-        checksum ^= *handle as u32 as u64;
-        checksum = checksum.wrapping_mul(0x100000001b3);
     }
     checksum
 }
@@ -618,6 +660,7 @@ fn main() {
         "deterministic benchmark drawlist changed"
     );
 
+    // Reproduce the opt-in asset receipt with POCKETJS_ASSET_WORKLOAD=1.
     if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
         let asset_fixture = AssetInputs::new();
         let asset_inputs = asset_fixture.inputs();
@@ -636,7 +679,7 @@ fn main() {
                 LIVE.load(Ordering::Relaxed),
                 COUNT.load(Ordering::Relaxed),
                 TOTAL.load(Ordering::Relaxed),
-                resource_checksum(&asset_fixture, &handles),
+                resource_checksum(&asset_ui, &asset_fixture, &handles),
             );
             if let Some(previous) = asset_record {
                 assert_eq!(receipt, previous, "asset workload was not deterministic");
@@ -661,7 +704,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        font_atlas_blob, format_asset_record, structural_tick, timing_capacity, AllocationLedger,
+        font_atlas_blob, format_asset_record, resource_checksum, structural_tick, timing_capacity,
+        AllocationLedger, AssetInputs, ASSET_FONT_SLOTS,
     };
     use pocketjs_core::Ui;
 
@@ -712,5 +756,36 @@ mod tests {
             record,
             "asset-workload peak_requested_bytes=1 final_requested_bytes=2 allocation_count=3 total_allocated_bytes=4 resource_checksum=0123456789abcdef"
         );
+    }
+
+    #[test]
+    fn asset_workload_installs_resources_with_stable_checksum() {
+        let fixture = AssetInputs::new();
+        let inputs = fixture.inputs();
+        let mut first_ui = Ui::new();
+        let mut first_handles = vec![-1; inputs.len()];
+        first_ui.load_assets(&inputs, &mut first_handles).unwrap();
+        for (kind, handle) in fixture.kinds.iter().zip(&first_handles) {
+            match kind {
+                pocketjs_core::assets::AssetKind::Styles
+                | pocketjs_core::assets::AssetKind::Font => assert_eq!(*handle, -1),
+                pocketjs_core::assets::AssetKind::Image
+                | pocketjs_core::assets::AssetKind::Sprite => {
+                    assert!(*handle >= 0);
+                    assert!(first_ui.texture(*handle).is_some());
+                }
+            }
+        }
+        for slot in ASSET_FONT_SLOTS {
+            assert!(first_ui.font_atlas(slot).is_some());
+        }
+        let first_checksum = resource_checksum(&first_ui, &fixture, &first_handles);
+
+        let mut second_ui = Ui::new();
+        let mut second_handles = vec![-1; inputs.len()];
+        second_ui.load_assets(&inputs, &mut second_handles).unwrap();
+        let second_checksum = resource_checksum(&second_ui, &fixture, &second_handles);
+
+        assert_eq!(first_checksum, second_checksum);
     }
 }
