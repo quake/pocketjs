@@ -5,9 +5,8 @@
 //! Invalid input and recoverable reservation failures leave it untouched.
 //! Ordinary Rust allocator exhaustion follows the host's fatal OOM policy.
 
-use crate::{rd_u16, spec, style, tex_alloc, text, Ui};
+use crate::{rd_u16, spec, tex_alloc, Ui};
 use alloc::vec;
-use core::mem;
 
 #[derive(Clone, Copy)]
 pub enum AssetKind {
@@ -43,102 +42,77 @@ impl Ui {
         if inputs.is_empty() {
             return Ok(());
         }
-        let original_styles = mem::replace(&mut self.styles, style::StyleTable::new());
-        let mut original_fonts = mem::replace(&mut self.fonts, text::Fonts::new());
-        let mut original_textures = mem::replace(&mut self.textures, Vec::new());
-        let original_tex_free = mem::replace(&mut self.tex_free, Vec::new());
-        let original_revision = self.raster_revision;
-        let original_dirty = self.layout.dirty;
+        let mut staged = Ui::new_with_raster_density(self.raster_density);
         let mut staged_handles = vec![-1; inputs.len()];
         let mut styles = false;
         let mut fonts = [false; spec::MAX_FONT_SLOTS];
-        let result = (|| {
-            for (index, input) in inputs.iter().enumerate() {
-                let b = input.bytes;
-                match input.kind {
-                    AssetKind::Styles => {
-                        if styles || !self.load_styles(b) {
-                            return Err(AssetError::Invalid);
-                        }
-                        styles = true;
+        for (index, input) in inputs.iter().enumerate() {
+            let b = input.bytes;
+            match input.kind {
+                AssetKind::Styles => {
+                    if styles || !staged.load_styles(b) {
+                        return Err(AssetError::Invalid);
                     }
-                    AssetKind::Font => {
-                        let slot = *b.get(12).ok_or(AssetError::Invalid)? as usize;
-                        if slot >= fonts.len() || fonts[slot] || !self.load_font_atlas(b) {
-                            return Err(AssetError::Invalid);
-                        }
-                        fonts[slot] = true;
+                    styles = true;
+                }
+                AssetKind::Font => {
+                    let slot = *b.get(12).ok_or(AssetError::Invalid)? as usize;
+                    if slot >= fonts.len() || fonts[slot] || !staged.load_font_atlas(b) {
+                        return Err(AssetError::Invalid);
                     }
-                    AssetKind::Image => {
-                        let handle = self.upload_img_entry(b);
-                        if handle < 0 {
-                            return Err(AssetError::Invalid);
-                        }
-                        staged_handles[index] = handle;
+                    fonts[slot] = true;
+                }
+                AssetKind::Image => {
+                    let handle = staged.upload_img_entry(b);
+                    if handle < 0 {
+                        return Err(AssetError::Invalid);
                     }
-                    AssetKind::Sprite => {
-                        if b.len() < 16 || b[5] != 0 {
-                            return Err(AssetError::Invalid);
-                        }
-                        let w = rd_u16(b, 0).ok_or(AssetError::Invalid)? as u32;
-                        let h = rd_u16(b, 2).ok_or(AssetError::Invalid)? as u32;
-                        let frames = rd_u16(b, 6).ok_or(AssetError::Invalid)? as u32;
-                        let cols = rd_u16(b, 8).ok_or(AssetError::Invalid)? as u32;
-                        let step = rd_u16(b, 10).ok_or(AssetError::Invalid)?;
-                        if frames == 0
-                            || cols == 0
-                            || step == 0
-                            || w % cols != 0
-                            || h % frames.div_ceil(cols) != 0
-                        {
-                            return Err(AssetError::Invalid);
-                        }
-                        let handle = self.upload_texture(&b[16..], w, h, b[4] as u32);
-                        if handle < 0 {
-                            return Err(AssetError::Invalid);
-                        }
-                        staged_handles[index] = handle;
+                    staged_handles[index] = handle;
+                }
+                AssetKind::Sprite => {
+                    if b.len() < 16 || b[5] != 0 {
+                        return Err(AssetError::Invalid);
                     }
+                    let w = rd_u16(b, 0).ok_or(AssetError::Invalid)? as u32;
+                    let h = rd_u16(b, 2).ok_or(AssetError::Invalid)? as u32;
+                    let frames = rd_u16(b, 6).ok_or(AssetError::Invalid)? as u32;
+                    let cols = rd_u16(b, 8).ok_or(AssetError::Invalid)? as u32;
+                    let step = rd_u16(b, 10).ok_or(AssetError::Invalid)?;
+                    if frames == 0
+                        || cols == 0
+                        || step == 0
+                        || w % cols != 0
+                        || h % frames.div_ceil(cols) != 0
+                    {
+                        return Err(AssetError::Invalid);
+                    }
+                    let handle = staged.upload_texture(&b[16..], w, h, b[4] as u32);
+                    if handle < 0 {
+                        return Err(AssetError::Invalid);
+                    }
+                    staged_handles[index] = handle;
                 }
             }
-            let additional = self.textures.len().saturating_sub(original_tex_free.len());
-            if original_textures.len().saturating_add(additional) > spec::TEX_SLOT_MASK as usize + 1
-            {
-                return Err(AssetError::NoMemory);
-            }
-            original_textures
-                .try_reserve(additional)
-                .map_err(|_| AssetError::NoMemory)
-        })();
-        if result.is_err() {
-            self.styles = original_styles;
-            self.fonts = original_fonts;
-            self.textures = original_textures;
-            self.tex_free = original_tex_free;
-            self.raster_revision = original_revision;
-            self.layout.dirty = original_dirty;
-            return result;
         }
+        let additional = staged.textures.len().saturating_sub(self.tex_free.len());
+        if self.textures.len().saturating_add(additional) > spec::TEX_SLOT_MASK as usize + 1 {
+            return Err(AssetError::NoMemory);
+        }
+        self.textures
+            .try_reserve(additional)
+            .map_err(|_| AssetError::NoMemory)?;
 
         // No fallible operation or allocation is allowed below this point.
-        let staged_styles = mem::replace(&mut self.styles, original_styles);
         if styles {
-            self.styles = staged_styles;
-        } else {
-            drop(staged_styles);
+            self.styles = staged.styles;
         }
-        original_fonts.merge_atlases(&mut self.fonts);
-        self.fonts = original_fonts;
-        let mut staged_textures = mem::replace(&mut self.textures, original_textures);
-        let staged_tex_free = mem::replace(&mut self.tex_free, original_tex_free);
-        drop(staged_tex_free);
+        self.fonts.merge_atlases(&mut staged.fonts);
         for handle in &mut staged_handles {
             if *handle >= 0 {
-                let texture = staged_textures[*handle as usize].tex.take().unwrap();
+                let texture = staged.textures[*handle as usize].tex.take().unwrap();
                 *handle = tex_alloc(&mut self.textures, &mut self.tex_free, texture);
             }
         }
-        drop(staged_textures);
         handles.copy_from_slice(&staged_handles);
         self.layout.dirty = true;
         self.bump_raster_revision();
