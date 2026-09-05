@@ -705,15 +705,9 @@ mod tests {
     #[test]
     fn asset_record_has_stable_measurement_shape() {
         let record = format_asset_record(1, 2, 3, 4, 0x0123_4567_89ab_cdef);
-        assert!(record.starts_with("asset-workload "));
-        for field in [
-            "peak_requested_bytes=",
-            "final_requested_bytes=",
-            "allocation_count=",
-            "total_allocated_bytes=",
-            "resource_checksum=",
-        ] {
-            assert!(record.contains(field), "missing {field}");
-        }
+        assert_eq!(
+            record,
+            "asset-workload peak_requested_bytes=1 final_requested_bytes=2 allocation_count=3 total_allocated_bytes=4 resource_checksum=0123456789abcdef"
+        );
     }
 }
