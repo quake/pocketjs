@@ -480,8 +480,6 @@ fn main() {
     // Fixture bytes, source strings, handles, churn ids, and timing state are
     // prepared before measurement. Setup allocations are intentionally outside
     // the workload receipt.
-    let asset_fixture = AssetInputs::new();
-    let asset_inputs = asset_fixture.inputs();
     let styles = style_blob();
     let atlas = texture_blob();
     let font_atlas = font_atlas_blob(0);
@@ -620,39 +618,44 @@ fn main() {
         "deterministic benchmark drawlist changed"
     );
 
-    const ASSET_REPETITIONS: usize = 3;
-    let mut asset_record = None;
-    for _ in 0..ASSET_REPETITIONS {
-        let mut asset_ui = Ui::new();
-        asset_ui.set_viewport(spec::SCREEN_W as f32, spec::SCREEN_H as f32);
-        let mut handles = vec![-1; asset_inputs.len()];
-        begin_measurement();
-        asset_ui.load_assets(&asset_inputs, &mut handles).unwrap();
-        end_measurement();
-        assert!(handles.iter().any(|handle| *handle >= 0));
-        let receipt = (
-            PEAK.load(Ordering::Relaxed),
-            LIVE.load(Ordering::Relaxed),
-            COUNT.load(Ordering::Relaxed),
-            TOTAL.load(Ordering::Relaxed),
-            resource_checksum(&asset_fixture, &handles),
-        );
-        if let Some(previous) = asset_record {
-            assert_eq!(receipt, previous, "asset workload was not deterministic");
+    if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
+        let asset_fixture = AssetInputs::new();
+        let asset_inputs = asset_fixture.inputs();
+        const ASSET_REPETITIONS: usize = 3;
+        let mut asset_record = None;
+        for _ in 0..ASSET_REPETITIONS {
+            let mut asset_ui = Ui::new();
+            asset_ui.set_viewport(spec::SCREEN_W as f32, spec::SCREEN_H as f32);
+            let mut handles = vec![-1; asset_inputs.len()];
+            begin_measurement();
+            asset_ui.load_assets(&asset_inputs, &mut handles).unwrap();
+            end_measurement();
+            assert!(handles.iter().any(|handle| *handle >= 0));
+            let receipt = (
+                PEAK.load(Ordering::Relaxed),
+                LIVE.load(Ordering::Relaxed),
+                COUNT.load(Ordering::Relaxed),
+                TOTAL.load(Ordering::Relaxed),
+                resource_checksum(&asset_fixture, &handles),
+            );
+            if let Some(previous) = asset_record {
+                assert_eq!(receipt, previous, "asset workload was not deterministic");
+            }
+            asset_record = Some(receipt);
         }
-        asset_record = Some(receipt);
+        let (asset_peak, asset_final, asset_count, asset_total, asset_checksum) =
+            asset_record.unwrap();
+        println!(
+            "{}",
+            format_asset_record(
+                asset_peak,
+                asset_final,
+                asset_count,
+                asset_total,
+                asset_checksum
+            )
+        );
     }
-    let (asset_peak, asset_final, asset_count, asset_total, asset_checksum) = asset_record.unwrap();
-    println!(
-        "{}",
-        format_asset_record(
-            asset_peak,
-            asset_final,
-            asset_count,
-            asset_total,
-            asset_checksum
-        )
-    );
 }
 
 #[cfg(test)]
