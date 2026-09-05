@@ -29,12 +29,23 @@ export interface BenchLine {
   drawlist_checksum?: string;
 }
 
+export type BenchActivationField = "fallback_glyph_runs" | "tileset_uploads";
+
+export interface BenchParseOptions {
+  require?: BenchActivationField[];
+}
+
 function isRequestedApp(row: BenchLine, app: string): boolean {
   const base = row.app.split(".")[0];
   return base === `${app}-main` || base === app;
 }
 
-export function parseBenchOutput(output: string, requestedApp: string, sample: number): BenchLine {
+export function parseBenchOutput(
+  output: string,
+  requestedApp: string,
+  sample: number,
+  options?: BenchParseOptions,
+): BenchLine {
   const lines = output.trim().split("\n").filter(Boolean);
   let rows: BenchLine[];
   try {
@@ -60,6 +71,15 @@ export function parseBenchOutput(output: string, requestedApp: string, sample: n
     const value = parsed[field];
     if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
       throw new Error(`${requestedApp} sample ${sample}: invalid ${field}`);
+    }
+  }
+  for (const field of options?.require ?? []) {
+    const value = parsed[field];
+    if (value === undefined) {
+      throw new Error(`${requestedApp} sample ${sample}: missing required ${field}`);
+    }
+    if (value <= 0) {
+      throw new Error(`${requestedApp} sample ${sample}: required ${field} must be positive`);
     }
   }
   return parsed;

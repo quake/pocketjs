@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { parseBenchOutput } from "../tools/bench-ppsspp-parser.ts";
+import { parseBenchOutput, type BenchActivationField } from "../tools/bench-ppsspp-parser.ts";
 
 function row(
   app: string,
   checksum?: string,
   bundle = 10,
   pak = 20,
-  counters?: { fallback_glyph_runs?: number; tileset_uploads?: number },
+  counters?: Partial<Record<BenchActivationField, unknown>>,
 ): string {
   return JSON.stringify({
     app,
@@ -50,14 +50,45 @@ test("parses optional workload activation counters", () => {
   expect(parsed.tileset_uploads).toBe(4);
 });
 
+test("requires a tileset activation counter when requested", () => {
+  expect(() => parseBenchOutput(row("asset-heavy"), "asset-heavy", 1, { require: ["tileset_uploads"] })).toThrow(
+    "asset-heavy sample 1: missing required tileset_uploads",
+  );
+  expect(
+    parseBenchOutput(row("asset-heavy", undefined, 10, 20, { tileset_uploads: 1 }), "asset-heavy", 1, {
+      require: ["tileset_uploads"],
+    }).tileset_uploads,
+  ).toBe(1);
+});
+
+test("requires a fallback glyph activation counter when requested", () => {
+  expect(() => parseBenchOutput(row("asset-heavy"), "asset-heavy", 1, { require: ["fallback_glyph_runs"] })).toThrow(
+    "asset-heavy sample 1: missing required fallback_glyph_runs",
+  );
+  expect(
+    parseBenchOutput(row("asset-heavy", undefined, 10, 20, { fallback_glyph_runs: 1 }), "asset-heavy", 1, {
+      require: ["fallback_glyph_runs"],
+    }).fallback_glyph_runs,
+  ).toBe(1);
+});
+
 test.each([
   ["fallback_glyph_runs", -1],
   ["tileset_uploads", 1.5],
   ["fallback_glyph_runs", "2"],
 ])("rejects invalid %s counter", (field, value) => {
-  expect(() => parseBenchOutput(row("asset-heavy", undefined, 10, 20, { [field]: value }), "asset-heavy", 1)).toThrow(
+  const counters = { [field as BenchActivationField]: value };
+  expect(() => parseBenchOutput(row("asset-heavy", undefined, 10, 20, counters), "asset-heavy", 1)).toThrow(
     `asset-heavy sample 1: invalid ${field}`,
   );
+});
+
+test.each(["fallback_glyph_runs", "tileset_uploads"] as const)("rejects zero %s when required", (field) => {
+  expect(() =>
+    parseBenchOutput(row("asset-heavy", undefined, 10, 20, { [field]: 0 }), "asset-heavy", 1, {
+      require: [field],
+    }),
+  ).toThrow(`asset-heavy sample 1: required ${field} must be positive`);
 });
 
 test("reports a missing requested app in multi-app output", () => {
