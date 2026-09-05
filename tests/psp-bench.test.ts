@@ -3,6 +3,16 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BENCH_WORKLOAD_SPECS, activationRequirement } from "../tools/bench-ppsspp-specs.ts";
+
+test("registers deterministic workload specs with path activation requirements", () => {
+  expect(BENCH_WORKLOAD_SPECS).toEqual([
+    expect.objectContaining({ app: "tileset", workload: "tileset", pspApp: "bench-workloads" }),
+    expect.objectContaining({ app: "fallback-glyph", workload: "fallback", pspApp: "bench-workloads" }),
+  ]);
+  expect(activationRequirement(BENCH_WORKLOAD_SPECS[0])).toEqual(["tileset_uploads"]);
+  expect(activationRequirement(BENCH_WORKLOAD_SPECS[1])).toEqual(["fallback_glyph_runs"]);
+});
 
 const NUMERIC_FIELDS = [
   "eval_us",

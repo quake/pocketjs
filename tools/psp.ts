@@ -338,6 +338,7 @@ const env = {
   POCKETJS_CAP_N: process.env.POCKETJS_CAP_N ?? "",
   POCKETJS_ARENA_BYTES: process.env.POCKETJS_ARENA_BYTES ?? "",
   POCKETJS_BENCH_DUMP_FRAMES: process.env.POCKETJS_BENCH_DUMP_FRAMES ?? "",
+  POCKETJS_BENCH_WORKLOAD: process.env.POCKETJS_BENCH_WORKLOAD ?? "",
   // Multi-app embed (docs/LAUNCHER.md): empty = single-app table of one.
   POCKETJS_LAUNCHER_REGISTRY: launcherRegistry,
   // Switch-veil logo texture (docs/PLATFORM.md), baked above.
