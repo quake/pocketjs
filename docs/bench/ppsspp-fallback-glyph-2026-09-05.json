@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "status": "PASS",
+  "selected_app": "fallback-glyph",
+  "framework": "solid",
+  "samples": 3,
+  "command": "bun tools/bench-ppsspp.ts --apps=fallback-glyph --samples=3 --memory-scan",
+  "report_path": "dist/bench/ppsspp-bench-2026-09-05T15-04-29-186Z.json",
+  "git_revision": "7d39fa617cb4d2b222f72461717f2c3ac4e1ef5a",
+  "ppsspp_revision": "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
+  "toolchain": {
+    "bun": "1.3.13"
+  },
+  "input": {
+    "workload": "fallback",
+    "memory_scan": true,
+    "memory_step_bytes": 262144,
+    "memory_safety_floor_bytes": 524288,
+    "memory_safety_percent": 20
+  },
+  "metrics": {
+    "eval_us": 369162,
+    "boot_to_frame0_us": 660994,
+    "avg_frame_interval_us": 83444,
+    "max_frame_interval_us": 86768,
+    "avg_js_us": 46,
+    "avg_jobs_us": 48,
+    "avg_tick_us": 24,
+    "avg_draw_us": 398,
+    "avg_render_us": 68560,
+    "avg_work_us": 69078,
+    "max_work_us": 74817,
+    "arena_bump_bytes": 2084672,
+    "arena_tail_free_bytes": 15744192,
+    "bundle_bytes": 136700,
+    "pak_bytes": 207488
+  },
+  "activation": {
+    "field": "fallback_glyph_runs",
+    "samples": [700, 700, 700],
+    "positive_every_sample": true
+  },
+  "checksum": "80ac13611f117e05",
+  "checksum_samples": ["80ac13611f117e05", "80ac13611f117e05", "80ac13611f117e05"],
+  "memory_scan": {
+    "uncapped_arena_bump_bytes": 2084672,
+    "min_pass_arena_bytes": 2097152,
+    "safe_arena_bytes": 2621440,
+    "attempts": 3
+  }
+}

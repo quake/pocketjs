@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "command": "POCKETJS_ASSET_WORKLOAD=1 cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet",
+  "toolchain": {
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)"
+  },
+  "git_revision": "7d39fa617cb4d2b222f72461717f2c3ac4e1ef5a",
+  "input": {
+    "environment": {
+      "POCKETJS_ASSET_WORKLOAD": "1"
+    },
+    "asset_fixture": "1 styles resource; 2 font atlases in slots 12 and 13; 8 images; 4 sprites",
+    "baseline_workload": "99 nodes; 24 steady ticks; 8 rounds of 4-node subtree churn; 16 text ticks; 12 burst ticks",
+    "text_mode": "atlas",
+    "texture_mode": "atlas"
+  },
+  "runs": [
+    {
+      "peak_requested_bytes": 144324,
+      "final_requested_bytes": 125608,
+      "allocation_count": 32,
+      "total_allocated_bytes": 145380,
+      "resource_checksum": "b8978afc66c137c3"
+    },
+    {
+      "peak_requested_bytes": 144324,
+      "final_requested_bytes": 125608,
+      "allocation_count": 32,
+      "total_allocated_bytes": 145380,
+      "resource_checksum": "b8978afc66c137c3"
+    }
+  ],
+  "receipt": {
+    "peak_requested_bytes": 144324,
+    "final_requested_bytes": 125608,
+    "allocation_count": 32,
+    "total_allocated_bytes": 145380,
+    "resource_checksum": "b8978afc66c137c3",
+    "stable_across_runs": true
+  }
+}
