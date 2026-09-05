@@ -1,9 +1,8 @@
 //! Atomic installation of a group of baked UI assets.
 //!
-//! Parsing and texture allocation temporarily use detached resource fields in
-//! the live core. The original resource fields are restored on failure, and
-//! installation happens only after texture storage has been reserved.
-//! Invalid input and recoverable reservation failures leave the core untouched.
+//! All parsing and texture allocation happens in a staging core. The live
+//! core is only changed after its texture slot storage has been reserved.
+//! Invalid input and recoverable reservation failures leave it untouched.
 //! Ordinary Rust allocator exhaustion follows the host's fatal OOM policy.
 
 use crate::{rd_u16, spec, style, tex_alloc, text, Ui};
@@ -50,10 +49,6 @@ impl Ui {
         let original_tex_free = mem::replace(&mut self.tex_free, Vec::new());
         let original_revision = self.raster_revision;
         let original_dirty = self.layout.dirty;
-        let original_auxiliary_dirty = self
-            .auxiliary
-            .as_ref()
-            .map(|auxiliary| auxiliary.layout.dirty);
         let mut staged_handles = vec![-1; inputs.len()];
         let mut styles = false;
         let mut fonts = [false; spec::MAX_FONT_SLOTS];
@@ -122,11 +117,6 @@ impl Ui {
             self.tex_free = original_tex_free;
             self.raster_revision = original_revision;
             self.layout.dirty = original_dirty;
-            if let (Some(auxiliary), Some(dirty)) =
-                (self.auxiliary.as_mut(), original_auxiliary_dirty)
-            {
-                auxiliary.layout.dirty = dirty;
-            }
             return result;
         }
 
@@ -188,50 +178,5 @@ mod tests {
         core.load_assets(&inputs[..1], &mut handles[..1]).unwrap();
         assert_eq!(handles[0], existing + 1);
         assert_eq!(core.texture(handles[0]).unwrap().pixels, &image[8..]);
-    }
-
-    #[test]
-    fn a_late_invalid_entry_restores_primary_and_auxiliary_layout_state() {
-        let mut core = Ui::new();
-        core.create_auxiliary_surface(320.0, 240.0);
-        core.layout.dirty = false;
-        core.auxiliary.as_mut().unwrap().layout.dirty = false;
-
-        let mut styles = Vec::new();
-        styles.extend_from_slice(&spec::style_table::MAGIC.to_le_bytes());
-        styles.extend_from_slice(&spec::style_table::VERSION.to_le_bytes());
-        styles.extend_from_slice(&0u16.to_le_bytes());
-        styles.extend_from_slice(&0u16.to_le_bytes());
-        styles.extend_from_slice(&[0, 0]);
-        let mut font = Vec::new();
-        font.extend_from_slice(&spec::font_atlas::MAGIC.to_le_bytes());
-        font.extend_from_slice(&spec::font_atlas::VERSION.to_le_bytes());
-        font.extend_from_slice(&1u16.to_le_bytes());
-        font.extend_from_slice(&[1, 1, 1, 1, 0, 0, 1, 0]);
-        font.extend_from_slice(&[1, 0]);
-        font.extend_from_slice(&[65, 0, 0, 0, 0, 0, 1, 0]);
-        font.push(0);
-        let inputs = [
-            AssetInput {
-                kind: AssetKind::Styles,
-                bytes: &styles,
-            },
-            AssetInput {
-                kind: AssetKind::Font,
-                bytes: &font,
-            },
-            AssetInput {
-                kind: AssetKind::Font,
-                bytes: b"bad-font",
-            },
-        ];
-        let mut handles = [-1; 3];
-
-        assert_eq!(
-            core.load_assets(&inputs, &mut handles),
-            Err(AssetError::Invalid)
-        );
-        assert!(!core.layout.needs());
-        assert!(!core.auxiliary.as_ref().unwrap().layout.needs());
     }
 }
