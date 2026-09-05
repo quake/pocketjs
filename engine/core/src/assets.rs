@@ -7,7 +7,7 @@
 //! Ordinary Rust allocator exhaustion follows the host's fatal OOM policy.
 
 use crate::{rd_u16, spec, style, tex_alloc, text, Ui};
-use alloc::{vec, vec::Vec};
+use alloc::vec;
 use core::mem;
 
 #[derive(Clone, Copy)]
