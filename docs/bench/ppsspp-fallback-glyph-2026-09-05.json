@@ -19,6 +19,7 @@
     "memory_safety_percent": 20
   },
   "metrics": {
+    "aggregation": "mean across samples",
     "eval_us": 369162,
     "boot_to_frame0_us": 660994,
     "avg_frame_interval_us": 83444,
@@ -46,6 +47,11 @@
     "uncapped_arena_bump_bytes": 2084672,
     "min_pass_arena_bytes": 2097152,
     "safe_arena_bytes": 2621440,
-    "attempts": 3
+    "attempt_count": 3,
+    "attempts": [
+      {"arena_bytes": 2097152, "pass": true, "avg_work_us": 69078, "arena_bump_bytes": 2084672},
+      {"arena_bytes": 1835008, "pass": false, "inferred": true, "error": "below uncapped high-water 1.99 MiB"},
+      {"arena_bytes": 2621440, "pass": true, "avg_work_us": 69078, "arena_bump_bytes": 2084672}
+    ]
   }
 }
