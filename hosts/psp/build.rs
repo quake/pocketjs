@@ -288,6 +288,8 @@ fn main() {
     // skip raw frame dumps while still using the capture window to exit.
     let arena_bytes = env::var("POCKETJS_ARENA_BYTES").unwrap_or_default();
     let bench_dump_frames = env::var("POCKETJS_BENCH_DUMP_FRAMES").unwrap_or_default();
+    // Benchmark-only fallback activation. Production builds leave this empty.
+    let bench_workload = env::var("POCKETJS_BENCH_WORKLOAD").unwrap_or_default();
 
     println!("cargo:rustc-env=POCKETJS_APP={app}");
     println!("cargo:rustc-env=POCKETJS_TARGET={target}");
@@ -298,6 +300,7 @@ fn main() {
     println!("cargo:rustc-env=POCKETJS_CAP_N={cap_n}");
     println!("cargo:rustc-env=POCKETJS_ARENA_BYTES={arena_bytes}");
     println!("cargo:rustc-env=POCKETJS_BENCH_DUMP_FRAMES={bench_dump_frames}");
+    println!("cargo:rustc-env=POCKETJS_BENCH_WORKLOAD={bench_workload}");
     println!("cargo:rerun-if-env-changed=POCKETJS_APP");
     println!("cargo:rerun-if-env-changed=POCKETJS_APP_OUTPUT");
     println!("cargo:rerun-if-env-changed=POCKETJS_EMBED_APP");
@@ -317,6 +320,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=POCKETJS_CAP_N");
     println!("cargo:rerun-if-env-changed=POCKETJS_ARENA_BYTES");
     println!("cargo:rerun-if-env-changed=POCKETJS_BENCH_DUMP_FRAMES");
+    println!("cargo:rerun-if-env-changed=POCKETJS_BENCH_WORKLOAD");
     if let Ok(entries) = fs::read_dir(&dist) {
         for e in entries.flatten() {
             println!("cargo:rerun-if-changed={}", e.path().display());

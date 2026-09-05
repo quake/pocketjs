@@ -1,0 +1,6 @@
+[
+  { "key": "ui:tile.zoom.0.0", "file": "../zoomlab/tiles/poster.0.bin" },
+  { "key": "ui:tile.zoom.0.1", "file": "../zoomlab/tiles/poster.1.bin" },
+  { "key": "ui:tile.zoom.0.2", "file": "../zoomlab/tiles/poster.2.bin" },
+  { "key": "ui:tile.zoom.0.3", "file": "../zoomlab/tiles/poster.3.bin" }
+]

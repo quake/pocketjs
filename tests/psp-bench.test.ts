@@ -3,7 +3,11 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BENCH_WORKLOAD_SPECS, activationRequirement } from "../tools/bench-ppsspp-specs.ts";
+import {
+  BENCH_WORKLOAD_SPECS,
+  activationRequirement,
+  matchesWorkload,
+} from "../tools/bench-ppsspp-specs.ts";
 
 test("registers deterministic workload specs with path activation requirements", () => {
   expect(BENCH_WORKLOAD_SPECS).toEqual([
@@ -12,6 +16,12 @@ test("registers deterministic workload specs with path activation requirements",
   ]);
   expect(activationRequirement(BENCH_WORKLOAD_SPECS[0])).toEqual(["tileset_uploads"]);
   expect(activationRequirement(BENCH_WORKLOAD_SPECS[1])).toEqual(["fallback_glyph_runs"]);
+});
+
+test("does not merge samples that share a PSP app id", () => {
+  expect(matchesWorkload("tileset", "fallback")).toBe(false);
+  expect(matchesWorkload("fallback", "fallback")).toBe(true);
+  expect(matchesWorkload(undefined, undefined)).toBe(true);
 });
 
 const NUMERIC_FIELDS = [

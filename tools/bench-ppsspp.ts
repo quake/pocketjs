@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { parseFramework, type PocketFramework } from "../framework/compiler/jsx-plugin.ts";
 import { parseBenchOutput, type BenchLine } from "./bench-ppsspp-parser.ts";
-import { activationRequirement, BENCH_WORKLOAD_SPECS, type BenchSpec } from "./bench-ppsspp-specs.ts";
+import { activationRequirement, BENCH_WORKLOAD_SPECS, matchesWorkload, type BenchSpec } from "./bench-ppsspp-specs.ts";
 
 type Spec = BenchSpec;
 
@@ -226,7 +226,7 @@ if (fromRaw) {
   console.log(`loaded ${samplesOut.length} samples from ${fromRaw}`);
   for (const spec of selectedSpecs) {
     for (const framework of frameworks) {
-      const n = samplesOut.filter((r) => isAppRow(r, spec.app, framework, spec.pspApp)).length;
+      const n = samplesOut.filter((r) => isAppRow(r, spec.app, framework, spec.pspApp, spec.workload)).length;
       if (n === 0) throw new Error(`--from-raw has no samples for ${spec.app} (${framework})`);
     }
   }
@@ -251,7 +251,7 @@ if (fromRaw) {
 
 if (memoryScan) {
   for (const spec of selectedSpecs) {
-    const uncappedRows = samplesOut.filter((r) => isAppRow(r, spec.app, frameworks[0], spec.pspApp));
+    const uncappedRows = samplesOut.filter((r) => isAppRow(r, spec.app, frameworks[0], spec.pspApp, spec.workload));
     const uncapped = uncappedRows.reduce((best, row) => (row.arena_bump_bytes > best.arena_bump_bytes ? row : best), uncappedRows[0]);
     if (!uncapped) throw new Error(`no uncapped sample for ${spec.app}`);
     const scan = await scanMemoryForApp(spec, uncapped);
@@ -271,7 +271,7 @@ const report = {
   apps: Object.fromEntries(
     selectedSpecs.map((spec) => [
       spec.app,
-      Object.fromEntries(frameworks.map((fw) => [fw, summarizeApp(samplesOut, spec.app, fw, spec.pspApp)])),
+      Object.fromEntries(frameworks.map((fw) => [fw, summarizeApp(samplesOut, spec.app, fw, spec.pspApp, spec.workload)])),
     ]),
   ),
   comparison: frameworks.length > 1 ? buildComparison(samplesOut, selectedSpecs) : undefined,
@@ -454,8 +454,15 @@ function writeRaw(value: unknown): void {
   writeFileSync(rawPath, `${JSON.stringify(value)}\n`, { flag: "a" });
 }
 
-function isAppRow(row: Sample, app: string, framework: PocketFramework, pspApp = app): boolean {
+function isAppRow(
+  row: Sample,
+  app: string,
+  framework: PocketFramework,
+  pspApp = app,
+  workload?: Spec["workload"],
+): boolean {
   if (row.framework !== framework) return false;
+  if (!matchesWorkload(row.workload, workload)) return false;
   // Device-side app ids may carry the framework output suffix.
   const base = row.app.split(".")[0];
   return base === `${app}-main` || base === app || base === `${pspApp}-main` || base === pspApp;
@@ -525,8 +532,9 @@ function summarizeApp(
   app: string,
   framework: PocketFramework,
   pspApp = app,
+  workload?: Spec["workload"],
 ): Record<Metric, ReturnType<typeof summarize>> {
-  const subset = rows.filter((r) => isAppRow(r, app, framework, pspApp));
+  const subset = rows.filter((r) => isAppRow(r, app, framework, pspApp, workload));
   return Object.fromEntries(METRICS.map((metric) => [metric, summarize(subset.map((r) => r[metric]))])) as Record<
     Metric,
     ReturnType<typeof summarize>
@@ -540,7 +548,7 @@ function summarizeChecksums(rows: Sample[], specs: Spec[]) {
       Object.fromEntries(
         frameworks.map((fw) => [
           fw,
-          [...new Set(rows.filter((r) => isAppRow(r, spec.app, fw, spec.pspApp)).map((r) => r.drawlist_checksum).filter(Boolean))],
+          [...new Set(rows.filter((r) => isAppRow(r, spec.app, fw, spec.pspApp, spec.workload)).map((r) => r.drawlist_checksum).filter(Boolean))],
         ]),
       ),
     ]),
@@ -560,8 +568,12 @@ function geomean(values: number[]): number {
 
 function buildComparison(rows: Sample[], specs: Spec[]) {
   const baseline = frameworks[0];
-  const cell = (app: string, fw: PocketFramework, metric: Metric): number[] =>
-    rows.filter((r) => isAppRow(r, app, fw, specs.find((spec) => spec.app === app)?.pspApp)).map((r) => r[metric]);
+  const cell = (app: string, fw: PocketFramework, metric: Metric): number[] => {
+    const spec = specs.find((candidate) => candidate.app === app);
+    return spec
+      ? rows.filter((r) => isAppRow(r, app, fw, spec.pspApp, spec.workload)).map((r) => r[metric])
+      : [];
+  };
   const ratioOverApps = (
     fw: PocketFramework,
     metric: Metric,

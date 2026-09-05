@@ -1,8 +1,17 @@
-import { Sprite, Text, View } from "@pocketjs/framework/components";
+import { DeepZoom, Text, View, type TileDoc } from "@pocketjs/framework/components";
+import { PAGES, TILE } from "../zoomlab/tiles.ts";
 
 const mode = import.meta.env.POCKETJS_BENCH_WORKLOAD === "fallback" ? "fallback" : "tileset";
-const TILE_COUNT = 24;
-const TILE_ASSET = "spinner-atlas.svg";
+
+const TILESET_DOC: TileDoc = {
+  name: PAGES[0].name,
+  w: PAGES[0].w,
+  h: PAGES[0].h,
+  bg: PAGES[0].bg,
+  tile: TILE,
+  levels: PAGES[0].levels,
+};
+
 const FALLBACK_TEXT = [
   "FALLBACK GLYPH PATH",
   "TOFU SCAN RECEIPT",
@@ -14,16 +23,9 @@ const FALLBACK_TEXT = [
 
 function TilesetWorkload() {
   return (
-    <View class="flex-col w-full h-full p-3 gap-2 bg-slate-950">
-      <Text class="text-xs text-slate-300">TILESET WORKLOAD</Text>
-      <View class="flex-row flex-wrap gap-2">
-        {Array.from({ length: TILE_COUNT }, (_, index) => (
-          <View class="w-[56] h-[56] items-center justify-center bg-slate-800 border-slate-700">
-            <Sprite sprite={TILE_ASSET} class="w-[48] h-[48]" />
-            <Text class="text-xs text-slate-400">{String(index).padStart(2, "0")}</Text>
-          </View>
-        ))}
-      </View>
+    <View class="flex-col w-full h-full bg-slate-950">
+      <DeepZoom doc={TILESET_DOC} bindInput={false} loadBudget={8} prefetch={1} />
+      <Text class="absolute left-2 top-2 text-xs text-white">TILESET WORKLOAD</Text>
     </View>
   );
 }

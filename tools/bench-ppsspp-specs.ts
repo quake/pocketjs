@@ -26,3 +26,7 @@ export function activationRequirement(spec: BenchSpec): BenchActivationField[] {
   if (spec.workload === "fallback") return ["fallback_glyph_runs"];
   return [];
 }
+
+export function matchesWorkload(actual: BenchSpec["workload"], requested: BenchSpec["workload"]): boolean {
+  return actual === requested;
+}

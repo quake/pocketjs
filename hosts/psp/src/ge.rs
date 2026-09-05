@@ -258,6 +258,12 @@ unsafe fn build_font_texture(atlas: &Atlas) -> Option<FontTexture> {
 }
 
 unsafe fn font_texture(atlas: &Atlas) -> Option<&'static FontTexture> {
+    // Benchmark-only path activation: bypass construction so the existing
+    // coverage scanner runs. Production builds never set this environment.
+    #[cfg(feature = "bench")]
+    if option_env!("POCKETJS_BENCH_WORKLOAD") == Some("fallback") {
+        return None;
+    }
     let slots = font_texture_slots();
     let idx = atlas.slot as usize;
     if idx >= slots.len() {
