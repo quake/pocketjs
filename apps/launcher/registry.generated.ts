@@ -28,6 +28,7 @@ export const REGISTRY: readonly RegistryApp[] = [
   { output: "hero-main", id: "dev.pocket-stack.hero", title: "PocketJS: Hero", cover: "covers/cover-hero-main.png", refl: "covers/refl-hero-main.png" },
   { output: "hero-vue-sfc-main", id: "dev.pocket-stack.hero.vue.sfc", title: "PocketJS: Hero Vue SFC", cover: "covers/cover-hero-vue-sfc-main.png", refl: "covers/refl-hero-vue-sfc-main.png" },
   { output: "hero-vue-vapor-main", id: "dev.pocket-stack.hero.vue.vapor", title: "PocketJS: Hero Vue Vapor", cover: "covers/cover-hero-vue-vapor-main.png", refl: "covers/refl-hero-vue-vapor-main.png" },
+  { output: "bench-workloads-main", id: "dev.pocket-stack.bench-workloads", title: "PocketJS: Memory Workloads", cover: "covers/cover-bench-workloads-main.png", refl: "covers/refl-bench-workloads-main.png" },
   { output: "stats-main", id: "dev.pocket-stack.stats", title: "PocketJS: Mission Control", cover: "covers/cover-stats-main.png", refl: "covers/refl-stats-main.png" },
   { output: "motions-main", id: "dev.pocket-stack.motions", title: "PocketJS: Motion Lab (yui540 studies on baked keyframe timelines)", cover: "covers/cover-motions-main.png", refl: "covers/refl-motions-main.png" },
   { output: "notifications-main", id: "dev.pocket-stack.notifications", title: "PocketJS: Notifications", cover: "covers/cover-notifications-main.png", refl: "covers/refl-notifications-main.png" },

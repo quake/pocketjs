@@ -68,6 +68,12 @@
   "covers/refl-hero-vue-vapor-main.png": {
     "linear": true
   },
+  "covers/cover-bench-workloads-main.png": {
+    "linear": true
+  },
+  "covers/refl-bench-workloads-main.png": {
+    "linear": true
+  },
   "covers/cover-stats-main.png": {
     "linear": true
   },

@@ -506,6 +506,7 @@ const result = await Bun.build({
     __POCKET_FEATURES__: JSON.stringify(buildPlan?.features ?? {}),
     __POCKET_PIXEL_RATIO__: String(rasterDensity),
     __POCKET_TICK_HZ__: String(tickHz),
+    "import.meta.env.POCKETJS_BENCH_WORKLOAD": JSON.stringify(process.env.POCKETJS_BENCH_WORKLOAD ?? ""),
     ...(framework === "vue-vapor"
       ? { document: "globalThis.__pocketDocument" }
       : {}),

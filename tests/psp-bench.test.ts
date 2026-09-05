@@ -158,3 +158,23 @@ test("PPSSPP workload reports include auditable activation samples", async () =>
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("benchmark build defines the workload mode at compile time", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pocketjs-psp-workload-build-"));
+  const build = async (workload: string) => {
+    const outDir = join(dir, workload);
+    await $`POCKETJS_BENCH_WORKLOAD=${workload} bun tools/build.ts bench-workloads --framework=solid --outdir=${outDir}`.quiet();
+    return readFile(join(outDir, "bench-workloads.js"), "utf8");
+  };
+
+  try {
+    const tileset = await build("");
+    const fallback = await build("fallback");
+    expect(tileset).not.toEqual(fallback);
+    expect(fallback).toContain("FALLBACK GLYPH WORKLOAD");
+    expect(tileset).toContain("TILESET WORKLOAD");
+    expect(fallback).not.toContain("import.meta.env.POCKETJS_BENCH_WORKLOAD");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
