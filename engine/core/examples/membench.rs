@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
+use pocketjs_core::assets::{AssetInput, AssetKind};
 use pocketjs_core::{spec, Ui};
 
 struct CountingAlloc;
@@ -288,7 +289,7 @@ fn texture_blob() -> Vec<u8> {
     atlas
 }
 
-fn font_atlas_blob() -> Vec<u8> {
+fn font_atlas_blob(slot: u8) -> Vec<u8> {
     const FIRST_GLYPH: u32 = 32;
     const GLYPH_COUNT: u16 = 95;
     const CELL_W: u8 = 8;
@@ -303,7 +304,7 @@ fn font_atlas_blob() -> Vec<u8> {
     push_u32(&mut atlas, spec::font_atlas::MAGIC);
     push_u16(&mut atlas, spec::font_atlas::VERSION);
     push_u16(&mut atlas, GLYPH_COUNT);
-    atlas.extend_from_slice(&[CELL_W, CELL_H, 12, 18, 0, 0, 1, 0]);
+    atlas.extend_from_slice(&[CELL_W, CELL_H, 12, 18, slot, 0, 1, 0]);
     for gid in 0..GLYPH_COUNT {
         push_u32(&mut atlas, FIRST_GLYPH + u32::from(gid));
         push_u16(&mut atlas, gid);
@@ -323,6 +324,109 @@ fn font_atlas_blob() -> Vec<u8> {
         }
     }
     atlas
+}
+
+fn image_entry(index: usize) -> Vec<u8> {
+    const WIDTH: usize = 32;
+    const HEIGHT: usize = 32;
+    let mut image = Vec::with_capacity(8 + WIDTH * HEIGHT * 4);
+    push_u16(&mut image, WIDTH as u16);
+    push_u16(&mut image, HEIGHT as u16);
+    image.push(spec::psm::PSM_8888 as u8);
+    image.push(0);
+    image.extend_from_slice(&[0, 0]);
+    for pixel in 0..WIDTH * HEIGHT {
+        image.extend_from_slice(&[
+            (pixel as u8).wrapping_add(index as u8),
+            (pixel as u8).wrapping_mul(3),
+            (pixel as u8).wrapping_mul(7),
+            0xff,
+        ]);
+    }
+    image
+}
+
+fn sprite_entry(index: usize) -> Vec<u8> {
+    const WIDTH: usize = 64;
+    const HEIGHT: usize = 64;
+    let mut sprite = Vec::with_capacity(16 + WIDTH * HEIGHT * 4);
+    push_u16(&mut sprite, WIDTH as u16);
+    push_u16(&mut sprite, HEIGHT as u16);
+    sprite.push(spec::psm::PSM_8888 as u8);
+    sprite.push(0);
+    push_u16(&mut sprite, 4);
+    push_u16(&mut sprite, 2);
+    push_u16(&mut sprite, 3 + index as u16);
+    push_u16(&mut sprite, 0);
+    push_u16(&mut sprite, 0);
+    for pixel in 0..WIDTH * HEIGHT {
+        sprite.extend_from_slice(&[
+            (pixel as u8).wrapping_add(index as u8),
+            (pixel as u8).wrapping_mul(5),
+            (pixel as u8).wrapping_mul(11),
+            0xff,
+        ]);
+    }
+    sprite
+}
+
+struct AssetInputs {
+    blobs: Vec<Vec<u8>>,
+    kinds: Vec<AssetKind>,
+}
+
+impl AssetInputs {
+    fn new() -> Self {
+        let mut blobs = vec![style_blob(), font_atlas_blob(12), font_atlas_blob(13)];
+        let mut kinds = vec![AssetKind::Styles, AssetKind::Font, AssetKind::Font];
+        for index in 0..8 {
+            blobs.push(image_entry(index));
+            kinds.push(AssetKind::Image);
+        }
+        for index in 0..4 {
+            blobs.push(sprite_entry(index));
+            kinds.push(AssetKind::Sprite);
+        }
+        Self { blobs, kinds }
+    }
+
+    fn inputs(&self) -> Vec<AssetInput<'_>> {
+        self.kinds
+            .iter()
+            .copied()
+            .zip(&self.blobs)
+            .map(|(kind, bytes)| AssetInput { kind, bytes })
+            .collect()
+    }
+}
+
+fn resource_checksum(inputs: &AssetInputs, handles: &[i32]) -> u64 {
+    let mut checksum: u64 = 0xcbf29ce484222325;
+    for (kind, blob) in inputs.kinds.iter().zip(&inputs.blobs) {
+        checksum ^= *kind as u8 as u64;
+        checksum = checksum.wrapping_mul(0x100000001b3);
+        for byte in blob {
+            checksum ^= u64::from(*byte);
+            checksum = checksum.wrapping_mul(0x100000001b3);
+        }
+    }
+    for handle in handles {
+        checksum ^= *handle as u32 as u64;
+        checksum = checksum.wrapping_mul(0x100000001b3);
+    }
+    checksum
+}
+
+fn format_asset_record(
+    peak: usize,
+    final_bytes: usize,
+    count: usize,
+    total: usize,
+    checksum: u64,
+) -> String {
+    format!(
+        "asset-workload peak_requested_bytes={peak} final_requested_bytes={final_bytes} allocation_count={count} total_allocated_bytes={total} resource_checksum={checksum:016x}"
+    )
 }
 
 fn timing_capacity() -> usize {
@@ -376,9 +480,11 @@ fn main() {
     // Fixture bytes, source strings, handles, churn ids, and timing state are
     // prepared before measurement. Setup allocations are intentionally outside
     // the workload receipt.
+    let asset_fixture = AssetInputs::new();
+    let asset_inputs = asset_fixture.inputs();
     let styles = style_blob();
     let atlas = texture_blob();
-    let font_atlas = font_atlas_blob();
+    let font_atlas = font_atlas_blob(0);
     let source_strings = [
         String::from("PocketJS memory benchmark"),
         String::from("deterministic retained core workload"),
@@ -513,11 +619,47 @@ fn main() {
         checksum, 0xcc6a0b00efdba151,
         "deterministic benchmark drawlist changed"
     );
+
+    const ASSET_REPETITIONS: usize = 3;
+    let mut asset_record = None;
+    for _ in 0..ASSET_REPETITIONS {
+        let mut asset_ui = Ui::new();
+        asset_ui.set_viewport(spec::SCREEN_W as f32, spec::SCREEN_H as f32);
+        let mut handles = vec![-1; asset_inputs.len()];
+        begin_measurement();
+        asset_ui.load_assets(&asset_inputs, &mut handles).unwrap();
+        end_measurement();
+        assert!(handles.iter().any(|handle| *handle >= 0));
+        let receipt = (
+            PEAK.load(Ordering::Relaxed),
+            LIVE.load(Ordering::Relaxed),
+            COUNT.load(Ordering::Relaxed),
+            TOTAL.load(Ordering::Relaxed),
+            resource_checksum(&asset_fixture, &handles),
+        );
+        if let Some(previous) = asset_record {
+            assert_eq!(receipt, previous, "asset workload was not deterministic");
+        }
+        asset_record = Some(receipt);
+    }
+    let (asset_peak, asset_final, asset_count, asset_total, asset_checksum) = asset_record.unwrap();
+    println!(
+        "{}",
+        format_asset_record(
+            asset_peak,
+            asset_final,
+            asset_count,
+            asset_total,
+            asset_checksum
+        )
+    );
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{font_atlas_blob, structural_tick, timing_capacity, AllocationLedger};
+    use super::{
+        font_atlas_blob, format_asset_record, structural_tick, timing_capacity, AllocationLedger,
+    };
     use pocketjs_core::Ui;
 
     #[test]
@@ -534,7 +676,7 @@ mod tests {
     #[test]
     fn fixture_atlas_loads_and_has_workload_glyphs() {
         let mut ui = Ui::new();
-        assert!(ui.load_font_atlas(&font_atlas_blob()));
+        assert!(ui.load_font_atlas(&font_atlas_blob(0)));
         let font = ui.font_atlas(0).unwrap();
         let (workload_gid, _) = font.lookup('P' as u32).unwrap();
         assert!(font
@@ -558,5 +700,20 @@ mod tests {
         let event = ledger.realloc(0x3000, 0x4000, 12);
         assert_eq!(event, Some((8, true)));
         assert_eq!(ledger.dealloc(0x4000), Some((12, true)));
+    }
+
+    #[test]
+    fn asset_record_has_stable_measurement_shape() {
+        let record = format_asset_record(1, 2, 3, 4, 0x0123_4567_89ab_cdef);
+        assert!(record.starts_with("asset-workload "));
+        for field in [
+            "peak_requested_bytes=",
+            "final_requested_bytes=",
+            "allocation_count=",
+            "total_allocated_bytes=",
+            "resource_checksum=",
+        ] {
+            assert!(record.contains(field), "missing {field}");
+        }
     }
 }
