@@ -14,7 +14,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { parseFramework, type PocketFramework } from "../framework/compiler/jsx-plugin.ts";
 import { parseBenchOutput, type BenchLine } from "./bench-ppsspp-parser.ts";
-import { activationRequirement, BENCH_WORKLOAD_SPECS, matchesWorkload, type BenchSpec } from "./bench-ppsspp-specs.ts";
+import {
+  activationRequirement,
+  activationSummary as summarizeActivation,
+  BENCH_WORKLOAD_SPECS,
+  matchesWorkload,
+  type BenchSpec,
+  validateActivation,
+} from "./bench-ppsspp-specs.ts";
 
 type Spec = BenchSpec;
 
@@ -226,8 +233,12 @@ if (fromRaw) {
   console.log(`loaded ${samplesOut.length} samples from ${fromRaw}`);
   for (const spec of selectedSpecs) {
     for (const framework of frameworks) {
-      const n = samplesOut.filter((r) => isAppRow(r, spec.app, framework, spec.pspApp, spec.workload)).length;
+      const matchingRows = samplesOut.filter((r) => isAppRow(r, spec.app, framework, spec.pspApp, spec.workload));
+      const n = matchingRows.length;
       if (n === 0) throw new Error(`--from-raw has no samples for ${spec.app} (${framework})`);
+      for (const row of matchingRows) {
+        validateActivation(row as unknown as Record<string, unknown>, spec, row.sample);
+      }
     }
   }
 } else {
@@ -271,7 +282,17 @@ const report = {
   apps: Object.fromEntries(
     selectedSpecs.map((spec) => [
       spec.app,
-      Object.fromEntries(frameworks.map((fw) => [fw, summarizeApp(samplesOut, spec.app, fw, spec.pspApp, spec.workload)])),
+      Object.fromEntries(
+        frameworks.map((fw) => {
+          const matchingRows = samplesOut.filter((row) => isAppRow(row, spec.app, fw, spec.pspApp, spec.workload));
+          const metrics = summarizeApp(samplesOut, spec.app, fw, spec.pspApp, spec.workload);
+          const activation = summarizeActivation(
+            matchingRows as unknown as Array<Record<string, unknown>>,
+            spec,
+          );
+          return [fw, activation ? { ...metrics, activation } : metrics];
+        }),
+      ),
     ]),
   ),
   comparison: frameworks.length > 1 ? buildComparison(samplesOut, selectedSpecs) : undefined,
@@ -633,6 +654,9 @@ function formatMetric(metric: Metric, value: number): string {
   return fmtUs(value);
 }
 
+type ActivationSummary = Exclude<ReturnType<typeof summarizeActivation>, undefined>;
+type AppMetrics = Record<Metric, ReturnType<typeof summarize>> & { activation?: ActivationSummary };
+
 function renderMarkdown(report: {
   generated: string;
   samples: number;
@@ -641,7 +665,7 @@ function renderMarkdown(report: {
   ppsspp_revision: string;
   git_revision: string;
   frame_budget_us: number;
-  apps: Record<string, Record<string, Record<Metric, ReturnType<typeof summarize>>>>;
+  apps: Record<string, Record<string, AppMetrics>>;
   comparison?: ReturnType<typeof buildComparison>;
   drawlist_checksums: Record<string, Record<string, string[]>>;
   memory_scan?: ReturnType<typeof renderMemoryScanReport>;
@@ -698,6 +722,13 @@ function renderMarkdown(report: {
       lines.push("");
       const checksums = report.drawlist_checksums[app]?.[fw] ?? [];
       lines.push(`Drawlist checksums: ${checksums.length ? checksums.join(", ") : "unavailable"}`, "");
+      if (metrics.activation) {
+        lines.push(
+          `Activation ${metrics.activation.field}: samples=${metrics.activation.samples.join(", ")}; ` +
+            `min=${metrics.activation.min}; max=${metrics.activation.max}; positive=${metrics.activation.positive}`,
+          "",
+        );
+      }
     }
   }
 

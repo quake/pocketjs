@@ -30,3 +30,28 @@ export function activationRequirement(spec: BenchSpec): BenchActivationField[] {
 export function matchesWorkload(actual: BenchSpec["workload"], requested: BenchSpec["workload"]): boolean {
   return actual === requested;
 }
+
+export function validateActivation(row: Record<string, unknown>, spec: BenchSpec, sample: number): void {
+  for (const field of activationRequirement(spec)) {
+    const value = row[field];
+    if (value === undefined) {
+      throw new Error(`${spec.app} sample ${sample}: missing required ${field}`);
+    }
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+      throw new Error(`${spec.app} sample ${sample}: invalid ${field}`);
+    }
+    if (value <= 0) {
+      throw new Error(`${spec.app} sample ${sample}: required ${field} must be positive`);
+    }
+  }
+}
+
+export function activationSummary(
+  rows: Array<Record<string, unknown>>,
+  spec: BenchSpec,
+): { field: BenchActivationField; samples: number[]; min: number; max: number; positive: boolean } | undefined {
+  const field = activationRequirement(spec)[0];
+  if (!field) return undefined;
+  const samples = rows.map((row) => row[field] as number);
+  return { field, samples, min: Math.min(...samples), max: Math.max(...samples), positive: samples.every((n) => n > 0) };
+}
