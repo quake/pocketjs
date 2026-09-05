@@ -5,12 +5,10 @@
   "framework": "solid",
   "samples": 3,
   "command": "bun tools/bench-ppsspp.ts --apps=tileset --samples=3 --memory-scan",
-  "report_path": "dist/bench/ppsspp-bench-2026-09-05T15-04-13-958Z.json",
+  "report_path": "dist/bench/ppsspp-bench-2026-09-05T23-07-20-437Z.json",
   "git_revision": "7d39fa617cb4d2b222f72461717f2c3ac4e1ef5a",
   "ppsspp_revision": "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
-  "toolchain": {
-    "bun": "1.3.13"
-  },
+  "toolchain": { "bun": "1.3.13" },
   "input": {
     "workload": "tileset",
     "memory_scan": true,
@@ -19,22 +17,18 @@
     "memory_safety_percent": 20
   },
   "metrics": {
-    "aggregation": "mean across samples",
-    "eval_us": 364446,
-    "boot_to_frame0_us": 611557,
-    "avg_frame_interval_us": 16910,
-    "max_frame_interval_us": 42046,
-    "avg_js_us": 386,
-    "avg_jobs_us": 32,
-    "avg_tick_us": 18,
-    "avg_draw_us": 280,
-    "avg_render_us": 71,
-    "avg_work_us": 789,
-    "max_work_us": 29174,
-    "arena_bump_bytes": 2282400,
-    "arena_tail_free_bytes": 15542112,
-    "bundle_bytes": 136699,
-    "pak_bytes": 207488
+    "aggregation": "mean/sd/min/max across 3 isolated baseline samples",
+    "avg_work_us": { "mean": 790, "sd": 0, "min": 790, "max": 790 },
+    "max_work_us": { "mean": 29170, "sd": 0, "min": 29170, "max": 29170 },
+    "avg_render_us": { "mean": 71, "sd": 0, "min": 71, "max": 71 },
+    "arena_bump_bytes": { "mean": 2282400, "sd": 0, "min": 2282400, "max": 2282400 },
+    "safe_arena_bytes": 2883584,
+    "sample_values": {
+      "avg_work_us": [790, 790, 790],
+      "max_work_us": [29170, 29170, 29170],
+      "avg_render_us": [71, 71, 71],
+      "arena_bump_bytes": [2282400, 2282400, 2282400]
+    }
   },
   "activation": {
     "field": "tileset_uploads",
@@ -49,9 +43,9 @@
     "safe_arena_bytes": 2883584,
     "attempt_count": 3,
     "attempts": [
-      {"arena_bytes": 2359296, "pass": true, "avg_work_us": 789, "arena_bump_bytes": 2282400},
-      {"arena_bytes": 2097152, "pass": false, "inferred": true, "error": "below uncapped high-water 2.18 MiB"},
-      {"arena_bytes": 2883584, "pass": true, "avg_work_us": 789, "arena_bump_bytes": 2282400}
+      { "arena_bytes": 2359296, "pass": true, "avg_work_us": 790, "arena_bump_bytes": 2282400 },
+      { "arena_bytes": 2097152, "pass": false, "inferred": true, "error": "below uncapped high-water 2.18 MiB" },
+      { "arena_bytes": 2883584, "pass": true, "avg_work_us": 790, "arena_bump_bytes": 2282400 }
     ]
   }
 }

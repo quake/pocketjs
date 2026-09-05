@@ -420,11 +420,18 @@ fn hash_u32(checksum: &mut u64, value: u32) {
 fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32], styles_loaded: bool) -> u64 {
     let mut checksum: u64 = 0xcbf29ce484222325;
     assert_eq!(inputs.kinds.len(), handles.len());
-    // Ui exposes no decoded styles view, so successful load_assets is the
-    // explicit validation signal for the fixture's styles resource.
+    // Ui exposes no decoded styles view, so successful load_assets plus the
+    // exact fixture blob hash is the available post-load validation boundary.
     assert!(styles_loaded);
     checksum ^= u64::from(styles_loaded);
     checksum = checksum.wrapping_mul(0x100000001b3);
+    let styles_blob = inputs
+        .kinds
+        .iter()
+        .zip(&inputs.blobs)
+        .find_map(|(kind, bytes)| matches!(kind, AssetKind::Styles).then_some(bytes.as_slice()))
+        .expect("asset fixture must include styles");
+    hash_bytes(&mut checksum, styles_blob);
     for (kind, handle) in inputs.kinds.iter().zip(handles) {
         checksum ^= *kind as u8 as u64;
         checksum = checksum.wrapping_mul(0x100000001b3);
@@ -808,6 +815,30 @@ mod tests {
             resource_checksum(&second_ui, &fixture, &second_handles, second_styles_loaded);
 
         assert_eq!(first_checksum, second_checksum);
-        assert_eq!(first_checksum, 0xb897_8afc_66c1_37c3);
+        assert_eq!(first_checksum, 0xf2f7_a1ac_65b9_ff90);
+    }
+
+    #[test]
+    fn asset_checksum_covers_the_installed_styles_fixture() {
+        let fixture = AssetInputs::new();
+        let inputs = fixture.inputs();
+        let mut original_ui = Ui::new();
+        let mut original_handles = vec![-1; inputs.len()];
+        let original_styles_loaded = original_ui.load_assets(&inputs, &mut original_handles).is_ok();
+        let original_checksum =
+            resource_checksum(&original_ui, &fixture, &original_handles, original_styles_loaded);
+
+        let mut changed_fixture = AssetInputs::new();
+        changed_fixture.blobs[0][16] ^= 1;
+        let changed_inputs = changed_fixture.inputs();
+        let mut changed_ui = Ui::new();
+        let mut changed_handles = vec![-1; changed_inputs.len()];
+        let changed_styles_loaded = changed_ui.load_assets(&changed_inputs, &mut changed_handles).is_ok();
+        let changed_checksum =
+            resource_checksum(&changed_ui, &changed_fixture, &changed_handles, changed_styles_loaded);
+
+        assert!(original_styles_loaded);
+        assert!(changed_styles_loaded);
+        assert_ne!(original_checksum, changed_checksum);
     }
 }
