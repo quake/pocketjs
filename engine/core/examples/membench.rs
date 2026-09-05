@@ -406,9 +406,25 @@ impl AssetInputs {
     }
 }
 
-fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32]) -> u64 {
+fn hash_bytes(checksum: &mut u64, bytes: &[u8]) {
+    for byte in bytes {
+        *checksum ^= u64::from(*byte);
+        *checksum = checksum.wrapping_mul(0x100000001b3);
+    }
+}
+
+fn hash_u32(checksum: &mut u64, value: u32) {
+    hash_bytes(checksum, &value.to_le_bytes());
+}
+
+fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32], styles_loaded: bool) -> u64 {
     let mut checksum: u64 = 0xcbf29ce484222325;
     assert_eq!(inputs.kinds.len(), handles.len());
+    // Ui exposes no decoded styles view, so successful load_assets is the
+    // explicit validation signal for the fixture's styles resource.
+    assert!(styles_loaded);
+    checksum ^= u64::from(styles_loaded);
+    checksum = checksum.wrapping_mul(0x100000001b3);
     for (kind, handle) in inputs.kinds.iter().zip(handles) {
         checksum ^= *kind as u8 as u64;
         checksum = checksum.wrapping_mul(0x100000001b3);
@@ -419,42 +435,42 @@ fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32]) -> u64 {
                     .texture(*handle)
                     .expect("asset texture handle must resolve");
                 for value in [texture.w, texture.h, texture.psm] {
-                    for byte in value.to_le_bytes() {
-                        checksum ^= u64::from(byte);
-                        checksum = checksum.wrapping_mul(0x100000001b3);
-                    }
+                    hash_u32(&mut checksum, value);
                 }
                 checksum ^= u64::from(texture.linear);
                 checksum = checksum.wrapping_mul(0x100000001b3);
-                for byte in texture.pixels {
-                    checksum ^= u64::from(*byte);
-                    checksum = checksum.wrapping_mul(0x100000001b3);
-                }
+                hash_bytes(&mut checksum, texture.pixels);
                 if let Some(palette) = texture.palette {
-                    for byte in palette {
-                        checksum ^= u64::from(*byte);
-                        checksum = checksum.wrapping_mul(0x100000001b3);
-                    }
+                    hash_bytes(&mut checksum, palette);
                 }
             }
         }
     }
     for slot in ASSET_FONT_SLOTS {
         let font = ui.font_atlas(slot).expect("asset font slot must resolve");
-        checksum ^= u64::from(slot);
-        checksum = checksum.wrapping_mul(0x100000001b3);
-        for value in [font.cell_w, font.cell_h, font.glyph_count as u32] {
-            for byte in value.to_le_bytes() {
-                checksum ^= u64::from(byte);
-                checksum = checksum.wrapping_mul(0x100000001b3);
-            }
+        for value in [
+            u32::from(font.slot),
+            font.cell_w,
+            font.cell_h,
+            font.baseline,
+            font.line_height,
+            u32::from(font.flags),
+            u32::from(font.glyph_count),
+            u32::from(font.raster_density),
+        ] {
+            hash_u32(&mut checksum, value);
         }
-        checksum ^= u64::from(font.raster_density);
-        checksum = checksum.wrapping_mul(0x100000001b3);
-        for byte in &font.bitmap {
-            checksum ^= u64::from(*byte);
-            checksum = checksum.wrapping_mul(0x100000001b3);
+        // lookup exposes the cmap's stable codepoint -> gid/advance mapping;
+        // xoff is intentionally not included because it has no public view.
+        for codepoint in 32..127 {
+            hash_u32(&mut checksum, codepoint);
+            let (gid, advance) = font
+                .lookup(codepoint)
+                .expect("asset font cmap entry must resolve");
+            hash_u32(&mut checksum, u32::from(gid));
+            hash_u32(&mut checksum, u32::from(advance));
         }
+        hash_bytes(&mut checksum, &font.bitmap);
     }
     checksum
 }
@@ -671,15 +687,16 @@ fn main() {
             asset_ui.set_viewport(spec::SCREEN_W as f32, spec::SCREEN_H as f32);
             let mut handles = vec![-1; asset_inputs.len()];
             begin_measurement();
-            asset_ui.load_assets(&asset_inputs, &mut handles).unwrap();
+            let styles_loaded = asset_ui.load_assets(&asset_inputs, &mut handles).is_ok();
             end_measurement();
+            assert!(styles_loaded);
             assert!(handles.iter().any(|handle| *handle >= 0));
             let receipt = (
                 PEAK.load(Ordering::Relaxed),
                 LIVE.load(Ordering::Relaxed),
                 COUNT.load(Ordering::Relaxed),
                 TOTAL.load(Ordering::Relaxed),
-                resource_checksum(&asset_ui, &asset_fixture, &handles),
+                resource_checksum(&asset_ui, &asset_fixture, &handles, styles_loaded),
             );
             if let Some(previous) = asset_record {
                 assert_eq!(receipt, previous, "asset workload was not deterministic");
@@ -764,7 +781,8 @@ mod tests {
         let inputs = fixture.inputs();
         let mut first_ui = Ui::new();
         let mut first_handles = vec![-1; inputs.len()];
-        first_ui.load_assets(&inputs, &mut first_handles).unwrap();
+        let first_styles_loaded = first_ui.load_assets(&inputs, &mut first_handles).is_ok();
+        assert!(first_styles_loaded);
         for (kind, handle) in fixture.kinds.iter().zip(&first_handles) {
             match kind {
                 pocketjs_core::assets::AssetKind::Styles
@@ -779,13 +797,17 @@ mod tests {
         for slot in ASSET_FONT_SLOTS {
             assert!(first_ui.font_atlas(slot).is_some());
         }
-        let first_checksum = resource_checksum(&first_ui, &fixture, &first_handles);
+        let first_checksum =
+            resource_checksum(&first_ui, &fixture, &first_handles, first_styles_loaded);
 
         let mut second_ui = Ui::new();
         let mut second_handles = vec![-1; inputs.len()];
-        second_ui.load_assets(&inputs, &mut second_handles).unwrap();
-        let second_checksum = resource_checksum(&second_ui, &fixture, &second_handles);
+        let second_styles_loaded = second_ui.load_assets(&inputs, &mut second_handles).is_ok();
+        assert!(second_styles_loaded);
+        let second_checksum =
+            resource_checksum(&second_ui, &fixture, &second_handles, second_styles_loaded);
 
         assert_eq!(first_checksum, second_checksum);
+        assert_eq!(first_checksum, 0x33ea_b4ab_a1c4_6f13);
     }
 }
