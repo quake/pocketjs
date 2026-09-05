@@ -464,11 +464,12 @@ fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32], styles_load
         // xoff is intentionally not included because it has no public view.
         for codepoint in 32..127 {
             hash_u32(&mut checksum, codepoint);
-            let (gid, advance) = font
-                .lookup(codepoint)
+            let entry = font
+                .lookup_entry(codepoint)
                 .expect("asset font cmap entry must resolve");
-            hash_u32(&mut checksum, u32::from(gid));
-            hash_u32(&mut checksum, u32::from(advance));
+            hash_u32(&mut checksum, u32::from(entry.gid));
+            hash_u32(&mut checksum, u32::from(entry.advance));
+            hash_u32(&mut checksum, u32::from(entry.xoff));
         }
         hash_bytes(&mut checksum, &font.bitmap);
     }
@@ -808,6 +809,6 @@ mod tests {
             resource_checksum(&second_ui, &fixture, &second_handles, second_styles_loaded);
 
         assert_eq!(first_checksum, second_checksum);
-        assert_eq!(first_checksum, 0x33ea_b4ab_a1c4_6f13);
+        assert_eq!(first_checksum, 0xb897_8afc_66c1_37c3);
     }
 }
