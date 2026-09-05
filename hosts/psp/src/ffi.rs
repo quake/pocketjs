@@ -292,6 +292,8 @@ unsafe extern "C" fn js_load_tile_texture(
     };
     JS_FreeCString(ctx, s);
     if handle >= 0 {
+        #[cfg(feature = "bench")]
+        crate::ge::bench_record_tileset_upload();
         crate::ge::writeback_texture(ui(), handle);
     }
     JS_NewInt32(ctx, handle)

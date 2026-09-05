@@ -164,6 +164,8 @@ struct BenchState {
     frame_interval_sum_us: u64,
     max_frame_interval_us: u64,
     drawlist_checksum: u64,
+    fallback_glyph_runs: u32,
+    tileset_uploads: u32,
 }
 
 #[cfg(feature = "bench")]
@@ -188,6 +190,8 @@ impl BenchState {
             frame_interval_sum_us: 0,
             max_frame_interval_us: 0,
             drawlist_checksum: DRAWLIST_CHECKSUM_OFFSET,
+            fallback_glyph_runs: 0,
+            tileset_uploads: 0,
         }
     }
 }
@@ -248,6 +252,7 @@ unsafe fn bench_init() {
 #[cfg(feature = "bench")]
 unsafe fn bench_start_guest() {
     BENCH = BenchState::new();
+    ge::bench_reset_counters();
     BENCH.run_start_us = bench_now_us();
 }
 
@@ -370,8 +375,11 @@ unsafe fn bench_maybe_flush(frame_count: u32) {
     let arena_stats = arena::stats();
     let stack_free_bytes =
         sys::sceKernelGetThreadStackFreeSize(sys::SceUid(sys::sceKernelGetThreadId())).max(0);
+    let (fallback_glyph_runs, tileset_uploads) = ge::bench_counters();
+    BENCH.fallback_glyph_runs = fallback_glyph_runs;
+    BENCH.tileset_uploads = tileset_uploads;
     let line = alloc::format!(
-         "{{\"app\":\"{}\",\"sim_hz\":{},\"frames\":{},\"window_start\":{},\"window_n\":{},\"eval_us\":{},\"boot_to_eval_begin_us\":{},\"boot_to_frame0_us\":{},\"avg_frame_interval_us\":{},\"max_frame_interval_us\":{},\"avg_js_us\":{},\"avg_jobs_us\":{},\"avg_tick_us\":{},\"avg_draw_us\":{},\"avg_render_us\":{},\"avg_work_us\":{},\"max_work_us\":{},\"avg_gpu_us\":{},\"max_gpu_us\":{},\"stack_free_bytes\":{},\"bundle_bytes\":{},\"pak_bytes\":{},\"arena_capacity_bytes\":{},\"arena_bump_bytes\":{},\"arena_tail_free_bytes\":{},\"arena_init_free_bytes\":{},\"arena_configured_bytes\":{},\"drawlist_checksum\":\"{:016x}\"}}\n",
+         "{{\"app\":\"{}\",\"sim_hz\":{},\"frames\":{},\"window_start\":{},\"window_n\":{},\"eval_us\":{},\"boot_to_eval_begin_us\":{},\"boot_to_frame0_us\":{},\"avg_frame_interval_us\":{},\"max_frame_interval_us\":{},\"avg_js_us\":{},\"avg_jobs_us\":{},\"avg_tick_us\":{},\"avg_draw_us\":{},\"avg_render_us\":{},\"avg_work_us\":{},\"max_work_us\":{},\"avg_gpu_us\":{},\"max_gpu_us\":{},\"fallback_glyph_runs\":{},\"tileset_uploads\":{},\"stack_free_bytes\":{},\"bundle_bytes\":{},\"pak_bytes\":{},\"arena_capacity_bytes\":{},\"arena_bump_bytes\":{},\"arena_tail_free_bytes\":{},\"arena_init_free_bytes\":{},\"arena_configured_bytes\":{},\"drawlist_checksum\":\"{:016x}\"}}\n",
         switch::current_output(),
         if switch::multi() { MULTI_APP_SIM_HZ } else { CORE_TICKS_PER_SECOND },
         BENCH.frames,
@@ -391,6 +399,8 @@ unsafe fn bench_maybe_flush(frame_count: u32) {
         BENCH.max_work_us,
         BENCH.gpu_sum_us / frames,
         BENCH.max_gpu_us,
+        BENCH.fallback_glyph_runs,
+        BENCH.tileset_uploads,
         stack_free_bytes,
         switch::guest_bytes(switch::current())
             .map(|g| g.js.len().saturating_sub(1))

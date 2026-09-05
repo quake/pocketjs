@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { parseBenchOutput } from "../tools/bench-ppsspp-parser.ts";
 
-function row(app: string, checksum?: string, bundle = 10, pak = 20): string {
+function row(
+  app: string,
+  checksum?: string,
+  bundle = 10,
+  pak = 20,
+  counters?: { fallback_glyph_runs?: number; tileset_uploads?: number },
+): string {
   return JSON.stringify({
     app,
     frames: 80,
@@ -9,6 +15,7 @@ function row(app: string, checksum?: string, bundle = 10, pak = 20): string {
     bundle_bytes: bundle,
     pak_bytes: pak,
     ...(checksum === undefined ? {} : { drawlist_checksum: checksum }),
+    ...counters,
   });
 }
 
@@ -30,6 +37,27 @@ test("keeps one-line legacy PSP output compatible", () => {
 
   expect(parsed.app).toBe("legacy-app");
   expect(parsed.drawlist_checksum).toBeUndefined();
+});
+
+test("parses optional workload activation counters", () => {
+  const parsed = parseBenchOutput(
+    row("asset-heavy", undefined, 10, 20, { fallback_glyph_runs: 3, tileset_uploads: 4 }),
+    "asset-heavy",
+    1,
+  );
+
+  expect(parsed.fallback_glyph_runs).toBe(3);
+  expect(parsed.tileset_uploads).toBe(4);
+});
+
+test.each([
+  ["fallback_glyph_runs", -1],
+  ["tileset_uploads", 1.5],
+  ["fallback_glyph_runs", "2"],
+])("rejects invalid %s counter", (field, value) => {
+  expect(() => parseBenchOutput(row("asset-heavy", undefined, 10, 20, { [field]: value }), "asset-heavy", 1)).toThrow(
+    `asset-heavy sample 1: invalid ${field}`,
+  );
 });
 
 test("reports a missing requested app in multi-app output", () => {

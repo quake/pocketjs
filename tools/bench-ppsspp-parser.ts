@@ -24,6 +24,8 @@ export interface BenchLine {
   arena_tail_free_bytes: number;
   arena_init_free_bytes: number;
   arena_configured_bytes: number;
+  fallback_glyph_runs?: number;
+  tileset_uploads?: number;
   drawlist_checksum?: string;
 }
 
@@ -53,6 +55,12 @@ export function parseBenchOutput(output: string, requestedApp: string, sample: n
   }
   if (parsed.drawlist_checksum !== undefined && !/^[0-9a-f]{16}$/.test(parsed.drawlist_checksum)) {
     throw new Error(`${requestedApp} sample ${sample}: invalid drawlist checksum`);
+  }
+  for (const field of ["fallback_glyph_runs", "tileset_uploads"] as const) {
+    const value = parsed[field];
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new Error(`${requestedApp} sample ${sample}: invalid ${field}`);
+    }
   }
   return parsed;
 }

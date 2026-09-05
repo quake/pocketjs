@@ -611,6 +611,8 @@ pub unsafe fn render_over(ui: &Ui, words: &[u32]) {
                     }
                     // Scan each glyph coverage cell into horizontal alpha
                     // runs, batched as sprite pairs in ONE draw.
+                    #[cfg(feature = "bench")]
+                    bench_record_fallback_glyph_run();
                     let (cw, ch) = (atlas.cell_w as usize, atlas.cell_h as usize);
                     // Pass 1: exact vertex count for the bump alloc.
                     let mut rects = 0usize;
@@ -819,4 +821,47 @@ pub unsafe fn render_over(ui: &Ui, words: &[u32]) {
     sys::sceGuDisable(GuState::Blend);
     sys::sceGuDisable(GuState::Texture2D);
     sys::sceGuScissor(0, 0, SCREEN_WIDTH as i32, SCREEN_HEIGHT as i32);
+}
+
+#[cfg(feature = "bench")]
+static mut BENCH_FALLBACK_GLYPH_RUNS: u32 = 0;
+
+#[cfg(feature = "bench")]
+static mut BENCH_TILESET_UPLOADS: u32 = 0;
+
+#[cfg(feature = "bench")]
+pub unsafe fn bench_reset_counters() {
+    BENCH_FALLBACK_GLYPH_RUNS = 0;
+    BENCH_TILESET_UPLOADS = 0;
+}
+
+#[cfg(feature = "bench")]
+pub unsafe fn bench_record_fallback_glyph_run() {
+    BENCH_FALLBACK_GLYPH_RUNS = BENCH_FALLBACK_GLYPH_RUNS.saturating_add(1);
+}
+
+#[cfg(feature = "bench")]
+pub unsafe fn bench_record_tileset_upload() {
+    BENCH_TILESET_UPLOADS = BENCH_TILESET_UPLOADS.saturating_add(1);
+}
+
+#[cfg(feature = "bench")]
+pub unsafe fn bench_counters() -> (u32, u32) {
+    (BENCH_FALLBACK_GLYPH_RUNS, BENCH_TILESET_UPLOADS)
+}
+
+#[cfg(all(test, feature = "bench"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benchmark_counters_reset_and_record() {
+        unsafe {
+            bench_record_fallback_glyph_run();
+            bench_record_tileset_upload();
+            assert_eq!(bench_counters(), (1, 1));
+            bench_reset_counters();
+            assert_eq!(bench_counters(), (0, 0));
+        }
+    }
 }
