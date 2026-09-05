@@ -460,8 +460,7 @@ fn resource_checksum(ui: &Ui, inputs: &AssetInputs, handles: &[i32], styles_load
         ] {
             hash_u32(&mut checksum, value);
         }
-        // lookup exposes the cmap's stable codepoint -> gid/advance mapping;
-        // xoff is intentionally not included because it has no public view.
+        // lookup_entry exposes the cmap's stable codepoint -> gid/advance/xoff mapping.
         for codepoint in 32..127 {
             hash_u32(&mut checksum, codepoint);
             let entry = font
