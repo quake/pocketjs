@@ -4,7 +4,7 @@
     "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
     "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)"
   },
-  "git_revision": "b7dd46f",
+  "git_revision": "708d215",
   "origin_main_revision": "2d20ddad228db52fa29ad7d7d06f44e8672164af",
   "benchmark_implementation_revision": "0821ddf",
   "workload": {
@@ -13,12 +13,12 @@
     "texture_mode": "atlas"
   },
   "receipt": {
-    "peak_requested_bytes": "29591",
-    "final_requested_bytes": "10793",
-    "allocation_count": "11682",
-    "total_allocated_bytes": "6225569",
-    "avg_layout_us": "1210",
-    "max_layout_us": "5163",
+    "peak_requested_bytes": "25281",
+    "final_requested_bytes": "6969",
+    "allocation_count": "9336",
+    "total_allocated_bytes": "6195449",
+    "avg_layout_us": "723",
+    "max_layout_us": "2462",
     "nodes": "99",
     "structural_relayouts": "16",
     "text_mode": "atlas",
