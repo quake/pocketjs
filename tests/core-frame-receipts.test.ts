@@ -464,6 +464,7 @@ test("layout structure scratch receipt proves safe ownership and rejected gates"
   expect(value.stats.checksum_samples).toEqual(value.stats.metric_arrays.drawlist_checksum);
   expect(value.stats.checksum).toBe(value.stats.checksum_samples[0]);
   expect(value.stats.safe_arena_bytes).toBe(value.stats.memory_scan.safe_arena_bytes);
+  expect(value.stats.report_path).toBeNull();
   expect(value.stats.metric_arrays).toEqual({
     frames: [100, 100, 100], window_start: [28, 28, 28], window_n: [100, 100, 100],
     avg_work_us: [4681, 4681, 4681], max_work_us: [62598, 62598, 62598], avg_render_us: [581, 581, 581],

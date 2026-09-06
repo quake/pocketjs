@@ -55,6 +55,7 @@
     "checksum": "c88e7bcedc5d42a5",
     "checksum_samples": ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"],
     "safe_arena_bytes": 3670016,
+    "report_path": null,
     "memory_scan": { "uncapped_arena_bump_bytes": 2649936, "min_pass_arena_bytes": 2883584, "safety_margin_bytes": 576717, "safe_arena_bytes": 3670016, "attempt_count": 3, "attempts": [{ "arena_bytes": 2883584, "pass": true, "avg_work_us": 4681, "arena_bump_bytes": 2649936 }, { "arena_bytes": 2621440, "pass": false, "error": "below uncapped high-water 2.53 MiB" }, { "arena_bytes": 3670016, "pass": true, "avg_work_us": 4681, "arena_bump_bytes": 2649936 }] }
   },
   "comparison": {
