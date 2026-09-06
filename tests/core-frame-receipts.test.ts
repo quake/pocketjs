@@ -307,3 +307,47 @@ test("layout text scratch discarded receipt uses the committed baseline", async 
     },
   );
 });
+
+test("Draw text scratch receipt links every gate to the committed baseline", async () => {
+  const [value, baseline] = await Promise.all([
+    receipt("core-layout-scratch-task2-text-discarded-2026-09-06.json"),
+    receipt("core-layout-scratch-baseline-2026-09-06.json"),
+  ]);
+  expect(value.status).toBe("DISCARDED");
+  expect(value.baseline_receipt).toBe(baselineReceiptName);
+  expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.candidate_git_revision).toBeNull();
+  expect(value.code_retained).toBe(false);
+  expect(value.candidate_files).toEqual(["engine/core/src/draw.rs"]);
+  expect(value.candidate_source).toBe("temporary uncommitted patch");
+  expect(value.candidate_reproducibility).toBe("not independently reproducible");
+  expect(value.toolchain).toEqual(baseline.toolchain);
+  expect(value.ppsspp_revision).toBe(baseline.ppsspp_revision);
+  expect(value.tdd.red.result).toBe("FAIL");
+  expect(value.tdd.green.result).toBe("PASS");
+  expect(value.ownership_review.decision).toBe("SAFE; rejected by benchmark gate");
+  assertBaselineComparison(value, baseline);
+  assertStatsEvidence(value.stats, {
+    avg_work_us: [4670, 4670, 4670], max_work_us: [62661, 62661, 62661], avg_render_us: [581, 581, 581],
+    arena_bump_bytes: [2649904, 2649904, 2649904], checksum: baseline.stats.checksum,
+    checksum_samples: baseline.stats.checksum_samples, safe_arena_bytes: baseline.stats.safe_arena_bytes,
+    memory_scan: value.stats.memory_scan, report_path: value.stats.report_path,
+  });
+  expect(value.comparison.avg_work_us.candidate).toEqual(value.stats.metric_arrays.avg_work_us);
+  expect(value.comparison.avg_render_us.candidate).toEqual(value.stats.metric_arrays.avg_render_us);
+  expect(value.comparison.max_work_us.candidate).toEqual(value.stats.metric_arrays.max_work_us);
+  expect(value.comparison.arena_bump_bytes.candidate).toEqual(value.stats.metric_arrays.arena_bump_bytes);
+  expect(value.comparison.drawlist_checksum.candidate).toEqual(value.stats.checksum_samples);
+  expect(value.decision.checksum_unchanged).toBe(true);
+  expect(value.decision.arena_regression).toBe(false);
+  expect(value.decision.safe_arena_regression).toBe(false);
+  expect(value.decision.max_work_regression).toBe(false);
+  expect(value.decision.threshold_math.required_improvement_percent).toBe(3);
+  expect(value.decision.avg_work_improvement_percent).toBeCloseTo(
+    ((mean(baseline.stats.metric_arrays.avg_work_us) - mean(value.stats.metric_arrays.avg_work_us)) /
+      mean(baseline.stats.metric_arrays.avg_work_us)) * 100,
+    10,
+  );
+  expect(value.decision.avg_render_improvement_percent).toBe(0);
+  expect(value.candidate_report_status).toContain("not retained");
+});
