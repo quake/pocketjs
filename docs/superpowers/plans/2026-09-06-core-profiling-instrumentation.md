@@ -187,3 +187,35 @@ cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet
 
 Record the six stage fields and use them to rank the next optimization
 candidates. Do not retain a code optimization in this task.
+## Task 3 Results
+
+- [x] Stage receipt: `bun test tests/core-memory-bench.test.ts` passed (5 tests, 0 failures).
+- [x] Core tests: `cargo test --manifest-path engine/core/Cargo.toml` passed (129 tests, 0 failures; 0 doc-tests).
+- [x] Requested Bun suite: `bun test tests/core-frame-receipts.test.ts tests/core-memory-bench.test.ts tests/psp-bench-parser.test.ts tests/psp-bench.test.ts` passed (31 tests, 0 failures).
+- [x] `git diff --check` passed.
+- [x] `git diff --name-only HEAD~1..HEAD -- engine/core/src hosts/psp` returned no production core/host changes.
+- [x] Final receipt: `cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet` completed with stable allocation totals.
+
+Measured final receipt:
+
+```text
+stage_tick_us=43120
+stage_draw_us=16432
+stage_layout_us=43114
+stage_animation_us=5
+stage_allocation_count=9336
+stage_total_allocated_bytes=6195449
+peak_requested_bytes=25281
+final_requested_bytes=6969
+allocation_count=9336
+total_allocated_bytes=6195449
+avg_layout_us=718
+max_layout_us=2654
+nodes=99
+structural_relayouts=16
+text_mode=atlas
+texture_mode=atlas
+drawlist_checksum=cc6a0b00efdba151
+```
+
+Interpretation: layout-phase tick time dominates; animation timing is only a few microseconds. Draw timing is reported separately, and allocation totals are stable.
