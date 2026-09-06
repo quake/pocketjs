@@ -504,8 +504,12 @@ struct StageProfile {
     draw_ns: u128,
     layout_ns: u128,
     animation_ns: u128,
+    avg_tick_us: u128,
+    max_tick_us: u128,
     allocation_count: usize,
     total_allocated_bytes: usize,
+    peak_requested_bytes: usize,
+    final_requested_bytes: usize,
 }
 
 #[allow(dead_code)]
@@ -519,16 +523,9 @@ enum Variant {
 }
 
 struct VariantReceipt {
-    peak_requested_bytes: usize,
-    final_requested_bytes: usize,
-    allocation_count: usize,
-    total_allocated_bytes: usize,
-    avg_tick_us: u128,
-    max_tick_us: u128,
     measured_ticks: usize,
     nodes: usize,
     structural_relayouts: u64,
-    draw_us: u128,
     checksum: String,
     profile: StageProfile,
 }
@@ -557,13 +554,15 @@ fn hash_draw(words: &[u32], checksum: &mut u64) {
     }
 }
 
-fn draw_and_hash(ui: &mut Ui, checksum: &mut u64) {
+fn warmup_draw(ui: &mut Ui, checksum: &mut u64, hash_enabled: bool) {
     let words = &ui.draw().words;
     assert!(
         words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
         "benchmark draw must emit atlas-backed glyphs"
     );
-    hash_draw(words, checksum);
+    if hash_enabled {
+        hash_draw(words, checksum);
+    }
 }
 
 fn tick_and_measure(
@@ -680,9 +679,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             panic!("workload variant is not implemented")
         }
     };
-    if draw_enabled {
-        draw_and_hash(&mut ui, &mut checksum);
-    }
+    // Normalize layout and draw caches for every variant before measurement.
+    warmup_draw(&mut ui, &mut checksum, draw_enabled);
 
     // Phase 2: steady style-only ticks.
     for i in 0..STEADY_TICKS {
@@ -781,6 +779,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     );
     profile.allocation_count = stage_allocation_count;
     profile.total_allocated_bytes = stage_total_allocated_bytes;
+    profile.peak_requested_bytes = PEAK.load(Ordering::Relaxed);
+    profile.final_requested_bytes = LIVE.load(Ordering::Relaxed);
     let allocation_count = COUNT.load(Ordering::Relaxed);
     let total_allocated_bytes = TOTAL.load(Ordering::Relaxed);
     assert_eq!(profile.allocation_count, allocation_count);
@@ -799,21 +799,12 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     // semantics. The stage fields above are workload-phase proxies instead.
     let avg_layout_us = total_us / timings.len() as u128;
     let max_layout_us = max_us;
+    profile.avg_tick_us = avg_layout_us;
+    profile.max_tick_us = max_layout_us;
     let receipt = VariantReceipt {
-        peak_requested_bytes: PEAK.load(Ordering::Relaxed),
-        final_requested_bytes: LIVE.load(Ordering::Relaxed),
-        allocation_count,
-        total_allocated_bytes,
-        avg_tick_us: avg_layout_us,
-        max_tick_us: max_layout_us,
         measured_ticks: timings.len(),
         nodes,
         structural_relayouts,
-        draw_us: if draw_enabled {
-            profile.draw_ns / 1_000
-        } else {
-            0
-        },
         checksum: if draw_enabled {
             format!("{checksum:016x}")
         } else {
@@ -834,7 +825,7 @@ fn main() {
     let full = run_variant(Variant::Full);
     assert_eq!(full.measured_ticks, 60);
     println!("stage_tick_us={}", full.profile.tick_ns / 1_000);
-    println!("stage_draw_us={}", full.draw_us);
+    println!("stage_draw_us={}", full.profile.draw_ns / 1_000);
     println!("stage_layout_us={}", full.profile.layout_ns / 1_000);
     println!("stage_animation_us={}", full.profile.animation_ns / 1_000);
     println!("stage_allocation_count={}", full.profile.allocation_count);
@@ -842,12 +833,12 @@ fn main() {
         "stage_total_allocated_bytes={}",
         full.profile.total_allocated_bytes
     );
-    println!("peak_requested_bytes={}", full.peak_requested_bytes);
-    println!("final_requested_bytes={}", full.final_requested_bytes);
-    println!("allocation_count={}", full.allocation_count);
-    println!("total_allocated_bytes={}", full.total_allocated_bytes);
-    println!("avg_layout_us={}", full.avg_tick_us);
-    println!("max_layout_us={}", full.max_tick_us);
+    println!("peak_requested_bytes={}", full.profile.peak_requested_bytes);
+    println!("final_requested_bytes={}", full.profile.final_requested_bytes);
+    println!("allocation_count={}", full.profile.allocation_count);
+    println!("total_allocated_bytes={}", full.profile.total_allocated_bytes);
+    println!("avg_layout_us={}", full.profile.avg_tick_us);
+    println!("max_layout_us={}", full.profile.max_tick_us);
     println!("nodes={}", full.nodes);
     println!("structural_relayouts={}", full.structural_relayouts);
     println!("text_mode=atlas");
