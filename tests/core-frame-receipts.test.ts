@@ -299,3 +299,77 @@ test("layout scratch discard receipt records the failed timing gate", async () =
   expect(value.candidate_report_status).toContain("not retained");
   expect(value.benchmark_report_path).toMatch(/^dist\/bench\/ppsspp-bench-.*\.json$/);
 });
+
+test("task 3 text scratch discard receipt preserves complete evidence", async () => {
+  const value = await receipt("core-layout-scratch-task3-discarded-2026-09-06.json");
+
+  expect(value.schema_version).toBe(1);
+  expect(value.status).toBe("DISCARDED");
+  expect(value.candidate).toBe("Task 3 reusable layout text-run scratch");
+  expect(value.baseline_receipt).toBe("docs/bench/core-layout-scratch-baseline-2026-09-06.json");
+  assertNoRetainedProductionCandidate(value);
+  expect(value.candidate_source).toBe("temporary uncommitted patch");
+  expect(value.candidate_reproducibility).toBe("not independently reproducible");
+  expect(value.candidate_files).toEqual(["engine/core/src/layout.rs", "engine/core/src/tests.rs"]);
+  expect(value.ownership_review).toEqual({
+    measure_ctx_owns_measurement_data: true,
+    taffy_context_borrows_scratch: false,
+    rejected_constraints: [],
+    decision: "SAFE",
+  });
+  expect(value.tdd).toEqual(expect.objectContaining({
+    red: { result: "FAIL", reason: "missing LayoutEngine::run_scratch field" },
+    green: { result: "PASS", tests: 1, before_benchmark_discard: true },
+  }));
+  expect(value.tdd.test_behavior).toHaveLength(3);
+  expect(value.candidate_test_commands).toEqual([
+    "cargo test --manifest-path engine/core/Cargo.toml repeated_text_relayouts_preserve_measurement_provider_and_drawlist",
+    "cargo test --manifest-path engine/core/Cargo.toml text -- --nocapture",
+    "cargo test --manifest-path engine/core/Cargo.toml",
+    "bun test tests/core-frame-receipts.test.ts",
+    "bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan",
+    "git diff --check",
+  ]);
+  expect(value.workload).toEqual({
+    app: "stats",
+    psp_app: "stats-main",
+    framework: "solid",
+    input_script: "0:0,84:0x20,88:0",
+    samples: 3,
+    frames: 100,
+    window_start: 28,
+    window_n: 100,
+  });
+  expect(value.samples).toBe(3);
+  expect(value.metric_arrays.avg_work_us).toEqual([4682, 4682, 4682]);
+  expect(value.metric_arrays.avg_render_us).toEqual([581, 581, 581]);
+  expect(value.metric_arrays.max_work_us).toEqual([62655, 62655, 62655]);
+  expect(value.metric_arrays.arena_bump_bytes).toEqual([2649936, 2649936, 2649936]);
+  expect(value.sample_records).toHaveLength(3);
+  expect(value.sample_records.every((sample: Record<string, unknown>) =>
+    sample.drawlist_checksum === value.checksum && sample.frames === 100,
+  )).toBe(true);
+  expect(value.checksum_samples).toEqual(value.metric_arrays.drawlist_checksum);
+  expect(value.comparison.drawlist_checksum.candidate).toEqual(
+    value.comparison.drawlist_checksum.baseline,
+  );
+  expect(value.decision.threshold_math).toEqual({
+    avg_work_baseline_mean_us: 4682,
+    avg_work_candidate_mean_us: 4682,
+    avg_work_improvement_percent: 0,
+    avg_render_baseline_mean_us: 581,
+    avg_render_candidate_mean_us: 581,
+    avg_render_improvement_percent: 0,
+    required_improvement_percent: 3,
+  });
+  expect(value.decision.avg_work_improvement_percent).toBe(0);
+  expect(value.decision.avg_render_improvement_percent).toBe(0);
+  expect(value.decision.checksum_unchanged).toBe(true);
+  expect(value.decision.arena_regression).toBe(true);
+  expect(value.decision.safe_arena_regression).toBe(false);
+  expect(value.memory_scan.attempt_count).toBe(3);
+  expect(value.memory_scan.attempts).toHaveLength(3);
+  expect(value.memory_scan.safe_arena_bytes).toBe(value.safe_arena_bytes);
+  expect(value.candidate_report_path).toMatch(/^dist\/bench\/ppsspp-bench-.*\.json$/);
+  expect(value.candidate_report_status).toContain("not retained");
+});
