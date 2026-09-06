@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "status": "UNMEASURED",
-  "candidate": "owner-local paint_3d items and tex_cells capacity reuse",
-  "plan": "docs/superpowers/plans/2026-09-06-core-frame-optimizations.md",
-  "baseline_receipt": "docs/bench/core-frame-baseline-2026-09-06.json",
-  "baseline_git_revision": "32f1d44787a8c3960ad6e7e32a966c45b8569214",
+  "candidate": "owner-local `paint_3d` `items`/`tex_cells` capacity reuse",
+  "plan": "docs/superpowers/plans/2026-09-06-core-frame-optimization-candidates.md",
+  "baseline_receipt": "docs/bench/core-layout-scratch-baseline-2026-09-06.json",
+  "baseline_git_revision": "a03eda0f22a73e2b09491e9e3efb64b6009aa251",
   "git_revision": "f527b034f6b4b4ea72d48eee4d3d30c0daa585b5",
   "ppsspp_revision": "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
   "toolchain": {
@@ -19,20 +19,40 @@
       "headless_path": "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
       "build_identifier": "f929a74"
     },
+    "rust": {
+      "core_toolchain": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+      "core_rustc_commit": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+      "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+      "psp_toolchain": "nightly-2026-05-28"
+    },
+    "psp_sdk": {
+      "PSP_SDK": null,
+      "identifier": null,
+      "note": "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available."
+    },
     "benchmark_flags": {
       "frameworks": ["solid"],
       "samples": 3,
       "memory_scan": true,
-      "command": "bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan"
+      "timeout_seconds": 60,
+      "bootstrap_iterations": 0,
+      "frame_budget_us": 16667,
+      "memory_step_bytes": 262144,
+      "memory_safety_floor_bytes": 524288,
+      "memory_safety_percent": 20,
+      "memory_max_bytes": 33554432
     }
   },
   "candidate_git_revision": null,
   "candidate_files": [
     "engine/core/src/draw.rs"
   ],
-  "candidate_source": "ownership inspection only; no production patch",
+  "candidate_source": "ownership inspection only; no production patch or test file changed",
   "candidate_reproducibility": "not applicable; candidate was rejected before implementation",
   "candidate_patch_artifact": null,
+  "candidate_provenance_reason": "No production patch or test file was changed; the candidate was rejected after ownership inspection because no reusable cross-frame owner or reproducible 3D workload exists.",
+  "candidate_report_path": null,
+  "candidate_report_status": "unavailable; no workload was executed",
   "code_retained": false,
   "ownership_review": {
     "items_owner": "paint_3d local Vec<(f32, Item3)>",

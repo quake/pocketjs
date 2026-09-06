@@ -138,34 +138,86 @@ test("text discard receipt records uncommitted, unreproducible provenance", asyn
 test("3D receipt records the inactive motions workload blocker", async () => {
   const [value, baseline] = await Promise.all([
     receipt("core-frame-task3-3d-unmeasured-2026-09-06.json"),
-    receipt("core-frame-baseline-2026-09-06.json"),
+    receipt("core-layout-scratch-baseline-2026-09-06.json"),
   ]);
 
   expect(value.schema_version).toBe(1);
   expect(value.status).toBe("UNMEASURED");
-  expect(value.plan).toBe(baseline.plan);
-  expect(value.baseline_receipt).toBe(coreFrameBaselineReceiptName);
+  expect(value.plan).toBe("docs/superpowers/plans/2026-09-06-core-frame-optimization-candidates.md");
+  expect(value.baseline_receipt).toBe("docs/bench/core-layout-scratch-baseline-2026-09-06.json");
   expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.git_revision).toBe("f527b034f6b4b4ea72d48eee4d3d30c0daa585b5");
   expect(value.ppsspp_revision).toBe(baseline.ppsspp_revision);
-  expect(value.toolchain.bun).toBe(baseline.toolchain.bun);
-  expect(value.reproducibility.benchmark_git_revision).toBe(value.git_revision);
-  expect(value.candidate).toBe("owner-local paint_3d items and tex_cells capacity reuse");
+  expect(value.toolchain).toEqual({
+    bun: "1.3.13",
+    rust: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    cargo: "cargo 1.97.1 (c980f4866 2026-06-30)",
+  });
+  expect(value.reproducibility).toEqual({
+    benchmark_git_revision: "f527b034f6b4b4ea72d48eee4d3d30c0daa585b5",
+    ppsspp: {
+      revision: baseline.ppsspp_revision,
+      headless_path: "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
+      build_identifier: "f929a74",
+    },
+    rust: {
+      core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+      core_rustc_commit: "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+      cargo: "cargo 1.97.1 (c980f4866 2026-06-30)",
+      psp_toolchain: "nightly-2026-05-28",
+    },
+    psp_sdk: {
+      PSP_SDK: null,
+      identifier: null,
+      note: "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available.",
+    },
+    benchmark_flags: {
+      frameworks: ["solid"], samples: 3, memory_scan: true, timeout_seconds: 60,
+      bootstrap_iterations: 0, frame_budget_us: 16667, memory_step_bytes: 262144,
+      memory_safety_floor_bytes: 524288, memory_safety_percent: 20, memory_max_bytes: 33554432,
+    },
+  });
+  expect(value.candidate).toBe("owner-local `paint_3d` `items`/`tex_cells` capacity reuse");
   assertNoRetainedProductionCandidate(value);
-  expect(value.candidate_source).toContain("ownership inspection only");
-  expect(value.candidate_reproducibility).toContain("rejected before implementation");
+  expect(value.candidate_files).toEqual(["engine/core/src/draw.rs"]);
+  expect(value.candidate_source).toBe("ownership inspection only; no production patch or test file changed");
+  expect(value.candidate_reproducibility).toBe("not applicable; candidate was rejected before implementation");
   expect(value.candidate_patch_artifact).toBeNull();
-  expect(value.ownership_review).toEqual(expect.objectContaining({
+  expect(value.candidate_provenance_reason).toBe("No production patch or test file was changed; the candidate was rejected after ownership inspection because no reusable cross-frame owner or reproducible 3D workload exists.");
+  expect(value.candidate_report_path).toBeNull();
+  expect(value.candidate_report_status).toBe("unavailable; no workload was executed");
+  expect(value.ownership_review).toEqual({
+    items_owner: "paint_3d local Vec<(f32, Item3)>",
+    tex_cells_owner: "paint_3d local Vec<TexCell>",
+    borrow_scope: "collect_3d receives mutable borrows only during recursive collection; items is sorted and consumed, while tex_cells remains referenced by Item3 ranges until emission completes",
+    walker_lifetime: "Walker is recreated by each build_root call, so fields on Walker would not reuse capacity across frames",
+    stable_insertion_order: "items.sort_by uses stable sort semantics for equal depths; tex cell insertion sort is stable and scoped to each mesh",
+    texture_batching: "one Item3::TexMesh remains per image; globally sorting cells would break consecutive texture batching",
     unsafe: false,
-    decision: expect.stringContaining("REJECTED WITHOUT PRODUCTION CODE"),
-  }));
+    decision: "SAFE LOCALLY, REJECTED WITHOUT PRODUCTION CODE because no reusable cross-frame owner or reproducible 3D measurement exists",
+  });
   expect(value.tdd).toEqual({
     status: "NOT APPLICABLE",
     reason: "No concrete production candidate was implemented, so no focused perspective ordering/checksum regression test was needed.",
     red: null,
     green: null,
   });
-  expect(value.candidate_test_commands).toContain("bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan");
+  expect(value.candidate_test_commands).toEqual([
+    "bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan",
+    "bun test tests/core-frame-receipts.test.ts",
+    "cargo test --manifest-path engine/core/Cargo.toml",
+    "git diff --check",
+  ]);
   expect(value.workload).toEqual({ app: "motions", framework: "solid", samples: 3, perspective_active: false });
+  expect(value.blocker).toEqual({
+    error: "unknown app motions",
+    explanation: "The benchmark registry does not define a motions app. The required command stopped before building or running a workload.",
+    available_apps: ["hero", "cards", "stats", "library", "settings", "notifications", "music", "tileset", "fallback-glyph"],
+    substitute_workload_used: false,
+  });
+  expect(value.command).toBe("bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan");
+  expect(value.error).toBe(value.blocker.error);
+  expect(value.reason).toBe("No active perspective workload exists in the current runner specs, so no 3D decision can be made. The candidate was rejected without production code and no substitute workload was used.");
   expect(value.decision).toEqual({
     status: "REJECTED",
     reason: "Ownership is safe for local use, but Walker is recreated per build_root and the required motions workload is unavailable. No 3D timing, memory, or checksum claim can be made, so no production code is retained.",
@@ -173,9 +225,6 @@ test("3D receipt records the inactive motions workload blocker", async () => {
     memory_claim: null,
     checksum_claim: null,
   });
-  expect(value.blocker.substitute_workload_used).toBe(false);
-  expect(value.error).toBe("unknown app motions");
-  expect(value.reason).toContain("No active perspective workload");
 });
 
 test("layout scratch baseline records canonical provenance and measurements", async () => {
