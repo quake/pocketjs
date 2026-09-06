@@ -231,6 +231,8 @@ test("layout scratch discard receipt records the failed timing gate", async () =
     window_n: 100,
   });
   expect(value.decision.threshold).toContain("3%");
+  expect(value.decision.reason).toContain("Neither timing metric met the 3% improvement gate");
+  expect(value.decision.reason).toContain("reverted without a committed diff");
   expect(value.decision.checksum_unchanged).toBe(true);
   expect(value.decision.arena_regression).toBe(false);
   expect(value.comparison.avg_work_us).toEqual({
@@ -258,6 +260,7 @@ test("layout scratch discard receipt records the failed timing gate", async () =
       "c88e7bcedc5d42a5",
     ],
   });
+  expect(value.comparison.drawlist_checksum.candidate).toEqual(value.comparison.drawlist_checksum.baseline);
   const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   const workImprovement =
     ((mean(value.comparison.avg_work_us.baseline) - mean(value.comparison.avg_work_us.candidate)) /
@@ -267,8 +270,16 @@ test("layout scratch discard receipt records the failed timing gate", async () =
     ((mean(value.comparison.avg_render_us.baseline) - mean(value.comparison.avg_render_us.candidate)) /
       mean(value.comparison.avg_render_us.baseline)) *
     100;
+  expect(workImprovement).toBeLessThan(3);
+  expect(renderImprovement).toBeLessThan(3);
   expect(value.decision.avg_work_improvement_percent).toBeCloseTo(workImprovement, 4);
   expect(value.decision.avg_render_improvement_percent).toBeCloseTo(renderImprovement, 4);
+  expect(value.comparison.arena_bump_bytes.candidate.every((bytes: number, index: number) =>
+    bytes <= value.comparison.arena_bump_bytes.baseline[index],
+  )).toBe(true);
+  expect(value.comparison.safe_arena_bytes.candidate).toBeLessThanOrEqual(
+    value.comparison.safe_arena_bytes.baseline,
+  );
   expect(value.memory_scan).toEqual({
     uncapped_arena_bump_bytes: 2649904,
     min_pass_arena_bytes: 2883584,
