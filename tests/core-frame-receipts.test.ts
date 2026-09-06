@@ -313,31 +313,99 @@ test("Draw text scratch receipt links every gate to the committed baseline", asy
     receipt("core-layout-scratch-task2-text-discarded-2026-09-06.json"),
     receipt("core-layout-scratch-baseline-2026-09-06.json"),
   ]);
+  expect(value.schema_version).toBe(1);
   expect(value.status).toBe("DISCARDED");
+  expect(value.plan).toBe("docs/superpowers/plans/2026-09-06-core-frame-optimization-candidates.md");
+  expect(value.git_revision).toBeNull();
   expect(value.baseline_receipt).toBe(baselineReceiptName);
   expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.ppsspp_revision).toBe("f929a74780b34bf8c1dfa9cf549bd9eb811e41aa");
+  expect(value.toolchain).toEqual({ bun: "1.3.13" });
+  expect(value.reproducibility).toEqual({
+    benchmark_git_revision: "c834ccb7a7433242fc43a76298ad62b397cb7f1e",
+    ppsspp: {
+      revision: "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
+      headless_path: "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
+      build_identifier: "f929a74",
+    },
+    rust: {
+      core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+      core_rustc_commit: "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+      cargo: "cargo 1.97.1 (c980f4866 2026-06-30)",
+      psp_toolchain: "nightly-2026-05-28",
+    },
+    psp_sdk: {
+      PSP_SDK: null,
+      identifier: null,
+      note: "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available.",
+    },
+    benchmark_flags: {
+      frameworks: ["solid"], samples: 3, memory_scan: true, timeout_seconds: 60,
+      bootstrap_iterations: 0, frame_budget_us: 16667, memory_step_bytes: 262144,
+      memory_safety_floor_bytes: 524288, memory_safety_percent: 20, memory_max_bytes: 33554432,
+    },
+  });
+  expect(value.candidate).toBe("Task 2 private Draw walker text-run scratch");
   expect(value.candidate_git_revision).toBeNull();
   expect(value.code_retained).toBe(false);
   expect(value.candidate_files).toEqual(["engine/core/src/draw.rs"]);
   expect(value.candidate_source).toBe("temporary uncommitted patch");
   expect(value.candidate_reproducibility).toBe("not independently reproducible");
-  expect(value.toolchain).toEqual(baseline.toolchain);
-  expect(value.ppsspp_revision).toBe(baseline.ppsspp_revision);
-  expect(value.tdd.red.result).toBe("FAIL");
-  expect(value.tdd.green.result).toBe("PASS");
-  expect(value.ownership_review.decision).toBe("SAFE; rejected by benchmark gate");
+  expect(value.candidate_patch_artifact).toBeNull();
+  expect(value.candidate_provenance_reason).toBe("The candidate was reverted because neither timing metric met the 3% gate. Its uncommitted production patch has no independently reproducible revision or artifact.");
+  expect(value.candidate_report_path).toBeNull();
+  expect(value.candidate_report_status).toBe("not retained; measured values are preserved in this receipt");
+  expect(value.candidate_test_commands).toEqual([
+    "cargo test --manifest-path engine/core/Cargo.toml reused_text_run_scratch_preserves_output_and_checksum",
+    "cargo test --manifest-path engine/core/Cargo.toml text -- --nocapture",
+    "cargo test --manifest-path engine/core/Cargo.toml",
+    "bun test tests/core-frame-receipts.test.ts",
+    "bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan",
+    "git diff --check",
+  ]);
+  expect(value.tdd).toEqual({
+    focused_command: "cargo test --manifest-path engine/core/Cargo.toml reused_text_run_scratch_preserves_output_and_checksum",
+    red: { result: "FAIL", reason: "missing Walker::run_scratch field; after correcting fixture casts, no unrelated errors remained" },
+    green: { result: "PASS", tests: 1, before_benchmark_discard: true },
+    test_behavior: ["native TEXT_RUN output was non-empty", "repeated output words were byte-identical", "repeated output checksums were identical", "scratch capacity was reused"],
+  });
+  expect(value.ownership_review).toEqual({
+    native_run_borrowed: true, baked_run_borrowed: true, long_lived_borrow: false,
+    unsafe: false, decision: "SAFE; rejected by benchmark gate",
+  });
   assertBaselineComparison(value, baseline);
+  expect(value.workload).toEqual({ app: "stats", psp_app: "stats-main", framework: "solid", input_script: "0:0,84:0x20,88:0", samples: 3, frames: 100, window_start: 28, window_n: 100 });
+  expect(value.stats.workload).toEqual({ app: "stats", psp_app: "stats-main", input_script: "0:0,84:0x20,88:0", cap_start: 28, cap_n: 100, framework: "solid" });
   assertStatsEvidence(value.stats, {
     avg_work_us: [4670, 4670, 4670], max_work_us: [62661, 62661, 62661], avg_render_us: [581, 581, 581],
-    arena_bump_bytes: [2649904, 2649904, 2649904], checksum: baseline.stats.checksum,
-    checksum_samples: baseline.stats.checksum_samples, safe_arena_bytes: baseline.stats.safe_arena_bytes,
-    memory_scan: value.stats.memory_scan, report_path: value.stats.report_path,
+    arena_bump_bytes: [2649904, 2649904, 2649904], checksum: "c88e7bcedc5d42a5",
+    checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"], safe_arena_bytes: 3670016,
+    memory_scan: { uncapped_arena_bump_bytes: 2649904, min_pass_arena_bytes: 2883584, safety_margin_bytes: 576717, safe_arena_bytes: 3670016, attempt_count: 3, attempts: [
+      { arena_bytes: 2883584, pass: true, avg_work_us: 4670, arena_bump_bytes: 2649904 },
+      { arena_bytes: 2621440, pass: false, error: "below uncapped high-water 2.53 MiB" },
+      { arena_bytes: 3670016, pass: true, avg_work_us: 4670, arena_bump_bytes: 2649904 },
+    ] }, report_path: "dist/bench/ppsspp-bench-2026-09-06T04-25-58-293Z.json",
   });
-  expect(value.comparison.avg_work_us.candidate).toEqual(value.stats.metric_arrays.avg_work_us);
-  expect(value.comparison.avg_render_us.candidate).toEqual(value.stats.metric_arrays.avg_render_us);
-  expect(value.comparison.max_work_us.candidate).toEqual(value.stats.metric_arrays.max_work_us);
-  expect(value.comparison.arena_bump_bytes.candidate).toEqual(value.stats.metric_arrays.arena_bump_bytes);
-  expect(value.comparison.drawlist_checksum.candidate).toEqual(value.stats.checksum_samples);
+  expect(value.stats.sample_records).toEqual([
+    { sample: 1, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: 4670, max_work_us: 62661, avg_render_us: 581, arena_bump_bytes: 2649904, drawlist_checksum: "c88e7bcedc5d42a5" },
+    { sample: 2, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: 4670, max_work_us: 62661, avg_render_us: 581, arena_bump_bytes: 2649904, drawlist_checksum: "c88e7bcedc5d42a5" },
+    { sample: 3, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: 4670, max_work_us: 62661, avg_render_us: 581, arena_bump_bytes: 2649904, drawlist_checksum: "c88e7bcedc5d42a5" },
+  ]);
+  expect(value.stats.metric_arrays).toEqual({ frames: [100, 100, 100], window_start: [28, 28, 28], window_n: [100, 100, 100], avg_work_us: [4670, 4670, 4670], max_work_us: [62661, 62661, 62661], avg_render_us: [581, 581, 581], arena_bump_bytes: [2649904, 2649904, 2649904], drawlist_checksum: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"] });
+  expect(value.stats.checksum).toBe("c88e7bcedc5d42a5");
+  expect(value.stats.checksum_samples).toEqual(["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"]);
+  expect(value.stats.safe_arena_bytes).toBe(3670016);
+  expect(value.stats.memory_scan).toEqual({ uncapped_arena_bump_bytes: 2649904, min_pass_arena_bytes: 2883584, safety_margin_bytes: 576717, safe_arena_bytes: 3670016, attempt_count: 3, attempts: [
+    { arena_bytes: 2883584, pass: true, avg_work_us: 4670, arena_bump_bytes: 2649904 },
+    { arena_bytes: 2621440, pass: false, error: "below uncapped high-water 2.53 MiB" },
+    { arena_bytes: 3670016, pass: true, avg_work_us: 4670, arena_bump_bytes: 2649904 },
+  ] });
+  expect(value.comparison.avg_work_us.candidate).toEqual([4670, 4670, 4670]);
+  expect(value.comparison.avg_render_us.candidate).toEqual([581, 581, 581]);
+  expect(value.comparison.max_work_us.candidate).toEqual([62661, 62661, 62661]);
+  expect(value.comparison.arena_bump_bytes.candidate).toEqual([2649904, 2649904, 2649904]);
+  expect(value.comparison.safe_arena_bytes.candidate).toBe(3670016);
+  expect(value.comparison.drawlist_checksum.candidate).toEqual(["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"]);
   expect(value.decision.checksum_unchanged).toBe(true);
   expect(value.decision.arena_regression).toBe(false);
   expect(value.decision.safe_arena_regression).toBe(false);
@@ -349,5 +417,7 @@ test("Draw text scratch receipt links every gate to the committed baseline", asy
     10,
   );
   expect(value.decision.avg_render_improvement_percent).toBe(0);
-  expect(value.candidate_report_status).toContain("not retained");
+  expect(value.decision.threshold).toBe("at least 3% improvement in avg_work_us or avg_render_us");
+  expect(value.decision.threshold_math).toEqual({ avg_work_baseline_mean_us: 4682, avg_work_candidate_mean_us: 4670, avg_work_improvement_percent: 0.2563007261853908, avg_render_baseline_mean_us: 581, avg_render_candidate_mean_us: 581, avg_render_improvement_percent: 0, required_improvement_percent: 3 });
+  expect(value.decision.reason).toBe("Discarded: neither avg_work_us nor avg_render_us improved by at least 3%; checksum, arena bump, safe arena, and correctness gates did not regress.");
 });
