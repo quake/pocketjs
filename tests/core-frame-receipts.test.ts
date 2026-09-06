@@ -52,11 +52,20 @@ test("3D receipt records the inactive motions workload blocker", async () => {
 test("layout scratch baseline records canonical provenance and measurements", async () => {
   const value = await receipt("core-layout-scratch-baseline-2026-09-06.json");
 
+  expect(value.schema_version).toBe(1);
   expect(value.status).toBe("BASELINE");
   expect(value.plan).toBe("docs/superpowers/plans/2026-09-06-layout-scratch-optimizations.md");
   expect(value.git_revision).toBe("a03eda0f22a73e2b09491e9e3efb64b6009aa251");
   expect(value.ppsspp_revision).toBe("f929a74780b34bf8c1dfa9cf549bd9eb811e41aa");
   expect(value.toolchain.bun).toBe("1.3.13");
+  expect(value.reproducibility.benchmark_git_revision).toBe(
+    "a03eda0f22a73e2b09491e9e3efb64b6009aa251",
+  );
+  expect(value.reproducibility.ppsspp).toEqual({
+    revision: "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
+    headless_path: "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
+    build_identifier: "f929a74",
+  });
   expect(value.reproducibility.rust).toEqual({
     core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
     core_rustc_commit: "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
@@ -68,8 +77,31 @@ test("layout scratch baseline records canonical provenance and measurements", as
     identifier: null,
     note: "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available.",
   });
+  expect(value.reproducibility.benchmark_flags).toEqual({
+    frameworks: ["solid"],
+    samples: 3,
+    memory_scan: true,
+    timeout_seconds: 60,
+    bootstrap_iterations: 0,
+    frame_budget_us: 16667,
+    memory_step_bytes: 262144,
+    memory_safety_floor_bytes: 524288,
+    memory_safety_percent: 20,
+    memory_max_bytes: 33554432,
+  });
   expect(value.stats.command).toBe("bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan");
   expect(value.stats.samples).toBe(3);
+  expect(value.stats.workload).toEqual({
+    app: "stats",
+    psp_app: "stats-main",
+    input_script: "0:0,84:0x20,88:0",
+    cap_start: 28,
+    cap_n: 100,
+    framework: "solid",
+  });
+  expect(value.stats.metric_arrays.frames).toEqual([100, 100, 100]);
+  expect(value.stats.metric_arrays.window_start).toEqual([28, 28, 28]);
+  expect(value.stats.metric_arrays.window_n).toEqual([100, 100, 100]);
   expect(value.stats.metric_arrays.avg_work_us).toEqual([4682, 4682, 4682]);
   expect(value.stats.metric_arrays.max_work_us).toEqual([62672, 62672, 62672]);
   expect(value.stats.metric_arrays.avg_render_us).toEqual([581, 581, 581]);
