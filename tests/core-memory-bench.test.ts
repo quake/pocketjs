@@ -25,9 +25,22 @@ const REQUIRED_FIELDS = [
   "text_mode",
   "texture_mode",
   "drawlist_checksum",
+  "stage_tick_us",
+  "stage_draw_us",
+  "stage_layout_us",
+  "stage_animation_us",
+  "stage_allocation_count",
+  "stage_total_allocated_bytes",
 ] as const;
 
-const TIMING_FIELDS = new Set(["avg_layout_us", "max_layout_us"]);
+const TIMING_FIELDS = new Set([
+  "avg_layout_us",
+  "max_layout_us",
+  "stage_tick_us",
+  "stage_draw_us",
+  "stage_layout_us",
+  "stage_animation_us",
+]);
 type Receipt = Record<(typeof REQUIRED_FIELDS)[number], string>;
 
 function parseReceipt(output: string): Receipt {
@@ -96,6 +109,11 @@ test("receipt parser rejects unknown and duplicate fields", () => {
   expect(() => parseReceipt(`${VALID_RECEIPT}\npeak_requested_bytes=0`)).toThrow();
 });
 
+test("receipt parser rejects empty and negative numeric values", () => {
+  expect(() => parseReceipt(VALID_RECEIPT.replace("nodes=0", "nodes="))).toThrow();
+  expect(() => parseReceipt(VALID_RECEIPT.replace("nodes=0", "nodes=-1"))).toThrow();
+});
+
 test("receipt parser rejects non-finite and non-integer numbers", () => {
   expect(() =>
     parseReceipt(
@@ -108,6 +126,28 @@ test("receipt parser rejects non-finite and non-integer numbers", () => {
   expect(() =>
     parseReceipt(VALID_RECEIPT.replace("peak_requested_bytes=0", "peak_requested_bytes=1.5")),
   ).toThrow();
+});
+
+test("receipt parser accepts all stage fields as non-negative integers", () => {
+  const receipt = parseReceipt(VALID_RECEIPT);
+  const stageFields = [
+    "stage_tick_us",
+    "stage_draw_us",
+    "stage_layout_us",
+    "stage_animation_us",
+    "stage_allocation_count",
+    "stage_total_allocated_bytes",
+  ] as const;
+
+  for (const field of stageFields) {
+    expect(receipt[field]).toMatch(/^\d+$/);
+    expect(Number.isInteger(Number(receipt[field]))).toBe(true);
+    expect(Number(receipt[field])).toBeGreaterThanOrEqual(0);
+  }
+
+  for (const field of ["stage_tick_us", "stage_draw_us", "stage_layout_us", "stage_animation_us"] as const) {
+    expect(receipt[field]).toBeDefined();
+  }
 });
 
 function canonicalReceipt(receipt: Receipt): Partial<Receipt> {
