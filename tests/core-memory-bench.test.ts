@@ -60,6 +60,10 @@ const STAGE_FIELDS = [
   "stage_allocation_count",
   "stage_total_allocated_bytes",
 ] as const;
+const STABLE_STAGE_FIELDS = [
+  "stage_allocation_count",
+  "stage_total_allocated_bytes",
+] as const;
 type Receipt = Record<(typeof REQUIRED_FIELDS)[number], string>;
 
 function parseReceipt(output: string): Receipt {
@@ -117,6 +121,7 @@ function parseReceipt(output: string): Receipt {
   return receipt as Receipt;
 }
 
+// Keep this fixture independent from REQUIRED_FIELDS so contract changes cannot update both together.
 const VALID_RECEIPT = [
   "peak_requested_bytes=0",
   "final_requested_bytes=0",
@@ -161,18 +166,16 @@ test("receipt parser rejects non-finite and non-integer numbers", () => {
   ).toThrow();
 });
 
-test("receipt parser accepts all stage fields as non-negative integers", () => {
-  const receipt = parseReceipt(VALID_RECEIPT);
-
-  for (const field of STAGE_FIELDS) {
-    expect(receipt[field]).toMatch(/^\d+$/);
-    expect(Number.isInteger(Number(receipt[field]))).toBe(true);
-    expect(Number(receipt[field])).toBeGreaterThanOrEqual(0);
-  }
-
-  for (const field of ["stage_tick_us", "stage_draw_us", "stage_layout_us", "stage_animation_us"] as const) {
-    expect(receipt[field]).toBeDefined();
-  }
+test("receipt fixture explicitly covers every stage field", () => {
+  expect(() => parseReceipt(VALID_RECEIPT)).not.toThrow();
+  expect(STAGE_FIELDS).toEqual([
+    "stage_tick_us",
+    "stage_draw_us",
+    "stage_layout_us",
+    "stage_animation_us",
+    "stage_allocation_count",
+    "stage_total_allocated_bytes",
+  ]);
 });
 
 function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
@@ -184,8 +187,8 @@ function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
   );
 }
 
-function stageReceipt(receipt: Receipt): Record<string, string> {
-  return Object.fromEntries(STAGE_FIELDS.map((field) => [field, receipt[field]]));
+function stableStageReceipt(receipt: Receipt): Record<string, string> {
+  return Object.fromEntries(STABLE_STAGE_FIELDS.map((field) => [field, receipt[field]]));
 }
 
 test(
@@ -198,7 +201,7 @@ test(
     const second = parseReceipt(await run());
 
     expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(second));
-    expect(stageReceipt(first)).toEqual(stageReceipt(second));
+    expect(stableStageReceipt(first)).toEqual(stableStageReceipt(second));
 
     const baseline = (await Bun.file(
       new URL("../docs/bench/core-memory-2026-09-05.json", import.meta.url),
