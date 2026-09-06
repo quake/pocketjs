@@ -641,6 +641,7 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     handles.push(ui.upload_texture(&atlas, 16, 16, spec::psm::PSM_8888));
     let texture = handles[0];
 
+    begin_measurement();
     let mut checksum = 0xcbf29ce484222325;
     let mut total_us = 0u128;
     let mut max_us = 0u128;
@@ -678,9 +679,9 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             panic!("workload variant is not implemented")
         }
     };
-    // Normalize layout and draw caches for every variant before measurement.
+    // Both variants share the existing measurement boundary; normalize layout
+    // and draw caches before measured ticks, then only control skips draw/hash.
     warmup_draw(&mut ui, &mut checksum, draw_enabled);
-    begin_measurement();
 
     // Phase 2: steady style-only ticks.
     for i in 0..STEADY_TICKS {
