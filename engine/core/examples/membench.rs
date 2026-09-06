@@ -498,6 +498,21 @@ fn timing_capacity() -> usize {
     24 + 8 + 16 + 12
 }
 
+#[derive(Default)]
+struct StageProfile {
+    tick_us: u128,
+    draw_us: u128,
+    layout_us: u128,
+    animation_us: u128,
+    allocation_count: usize,
+    total_allocated_bytes: usize,
+}
+
+enum WorkloadPhase {
+    Animation,
+    Layout,
+}
+
 fn structural_tick(tick: usize) -> bool {
     tick % 4 == 0
 }
@@ -526,13 +541,35 @@ fn draw_and_hash(ui: &mut Ui, checksum: &mut u64) {
     hash_draw(words, checksum);
 }
 
-fn tick_and_measure(ui: &mut Ui, checksum: &mut u64, total_us: &mut u128, max_us: &mut u128) {
-    let started = Instant::now();
+fn tick_and_measure(
+    ui: &mut Ui,
+    checksum: &mut u64,
+    total_us: &mut u128,
+    max_us: &mut u128,
+    profile: &mut StageProfile,
+    phase: WorkloadPhase,
+) {
+    let tick_started = Instant::now();
     ui.tick();
-    let elapsed = started.elapsed().as_micros();
-    *total_us += elapsed;
-    *max_us = (*max_us).max(elapsed);
-    draw_and_hash(ui, checksum);
+    let tick_us = tick_started.elapsed().as_micros();
+    *total_us += tick_us;
+    *max_us = (*max_us).max(tick_us);
+    profile.tick_us += tick_us;
+    // These are workload-phase proxies, not internal function timings.
+    match phase {
+        WorkloadPhase::Animation => profile.animation_us += tick_us,
+        WorkloadPhase::Layout => profile.layout_us += tick_us,
+    }
+
+    let draw_started = Instant::now();
+    let words = &ui.draw().words;
+    let draw_us = draw_started.elapsed().as_micros();
+    assert!(
+        words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
+        "benchmark draw must emit atlas-backed glyphs"
+    );
+    hash_draw(words, checksum);
+    profile.draw_us += draw_us;
 }
 
 fn main() {
@@ -579,6 +616,7 @@ fn main() {
     let mut checksum = 0xcbf29ce484222325;
     let mut total_us = 0u128;
     let mut max_us = 0u128;
+    let mut profile = StageProfile::default();
 
     // Phase 1: initial tree and resources.
     let panel = ui.create_node(spec::NodeType::View as u8);
@@ -610,7 +648,14 @@ fn main() {
     // Phase 2: steady style-only ticks.
     for i in 0..STEADY_TICKS {
         ui.set_prop(panel, spec::prop::OPACITY, 0.85 + (i % 4) as f64 * 0.03);
-        tick_and_measure(&mut ui, &mut checksum, &mut total_us, &mut max_us);
+        tick_and_measure(
+            &mut ui,
+            &mut checksum,
+            &mut total_us,
+            &mut max_us,
+            &mut profile,
+            WorkloadPhase::Animation,
+        );
         timings.push(i);
     }
 
@@ -628,7 +673,14 @@ fn main() {
         for node in churn_ids.iter().copied() {
             ui.destroy_node(node);
         }
-        tick_and_measure(&mut ui, &mut checksum, &mut total_us, &mut max_us);
+        tick_and_measure(
+            &mut ui,
+            &mut checksum,
+            &mut total_us,
+            &mut max_us,
+            &mut profile,
+            WorkloadPhase::Layout,
+        );
         structural_relayouts += 1;
         timings.push(STEADY_TICKS + round);
     }
@@ -646,7 +698,14 @@ fn main() {
             structural_probe(&mut ui, panel, 22.0 + i as f64);
             structural_relayouts += 1;
         }
-        tick_and_measure(&mut ui, &mut checksum, &mut total_us, &mut max_us);
+        tick_and_measure(
+            &mut ui,
+            &mut checksum,
+            &mut total_us,
+            &mut max_us,
+            &mut profile,
+            WorkloadPhase::Layout,
+        );
         timings.push(STEADY_TICKS + CHURN_ROUNDS + i);
     }
 
@@ -659,18 +718,32 @@ fn main() {
             structural_probe(&mut ui, panel, 30.0 + i as f64);
             structural_relayouts += 1;
         }
-        tick_and_measure(&mut ui, &mut checksum, &mut total_us, &mut max_us);
+        tick_and_measure(
+            &mut ui,
+            &mut checksum,
+            &mut total_us,
+            &mut max_us,
+            &mut profile,
+            WorkloadPhase::Layout,
+        );
         timings.push(STEADY_TICKS + CHURN_ROUNDS + TEXT_TICKS + i);
     }
 
     let nodes = 1 + 1 + 1 + 32 * 3;
     end_measurement();
+    let allocation_count = COUNT.load(Ordering::Relaxed);
+    let total_allocated_bytes = TOTAL.load(Ordering::Relaxed);
+    profile.allocation_count = allocation_count;
+    profile.total_allocated_bytes = total_allocated_bytes;
+    assert_eq!(profile.allocation_count, allocation_count);
+    assert_eq!(profile.total_allocated_bytes, total_allocated_bytes);
+    assert_eq!(profile.layout_us + profile.animation_us, profile.tick_us);
     // Ui::tick includes animation bookkeeping, so this is a tick/layout proxy.
     let avg_layout_us = total_us / timings.len() as u128;
     println!("peak_requested_bytes={}", PEAK.load(Ordering::Relaxed));
     println!("final_requested_bytes={}", LIVE.load(Ordering::Relaxed));
-    println!("allocation_count={}", COUNT.load(Ordering::Relaxed));
-    println!("total_allocated_bytes={}", TOTAL.load(Ordering::Relaxed));
+    println!("allocation_count={allocation_count}");
+    println!("total_allocated_bytes={total_allocated_bytes}");
     println!("avg_layout_us={avg_layout_us}");
     println!("max_layout_us={max_us}");
     println!("nodes={nodes}");
@@ -678,6 +751,15 @@ fn main() {
     println!("text_mode=atlas");
     println!("texture_mode=atlas");
     println!("drawlist_checksum={checksum:016x}");
+    println!("stage_tick_us={}", profile.tick_us);
+    println!("stage_draw_us={}", profile.draw_us);
+    println!("stage_layout_us={}", profile.layout_us);
+    println!("stage_animation_us={}", profile.animation_us);
+    println!("stage_allocation_count={}", profile.allocation_count);
+    println!(
+        "stage_total_allocated_bytes={}",
+        profile.total_allocated_bytes
+    );
     assert_eq!(
         checksum, 0xcc6a0b00efdba151,
         "deterministic benchmark drawlist changed"
