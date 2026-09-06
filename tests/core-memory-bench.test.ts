@@ -179,7 +179,9 @@ test("receipt fixture explicitly covers every stage field", () => {
   }
 });
 
-function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
+function legacyCanonicalReceipt(
+  receipt: Pick<Receipt, (typeof LEGACY_CANONICAL_FIELDS)[number]>,
+): Record<string, string> {
   return Object.fromEntries(
     LEGACY_CANONICAL_FIELDS.map((field) => [
       field,
@@ -192,6 +194,14 @@ function deterministicStageReceipt(receipt: Receipt): Record<string, string> {
   return Object.fromEntries(DETERMINISTIC_STAGE_FIELDS.map((field) => [field, receipt[field]]));
 }
 
+function expectStageMetrics(receipt: Receipt): void {
+  expect(Number(receipt.stage_layout_us) + Number(receipt.stage_animation_us)).toBe(
+    Number(receipt.stage_tick_us),
+  );
+  expect(receipt.stage_allocation_count).toBe(receipt.allocation_count);
+  expect(receipt.stage_total_allocated_bytes).toBe(receipt.total_allocated_bytes);
+}
+
 test(
   "core memory receipt is complete, stable, and matches its baseline",
   { timeout: 30_000 },
@@ -201,12 +211,14 @@ test(
     const first = parseReceipt(await run());
     const second = parseReceipt(await run());
 
+    expectStageMetrics(first);
+    expectStageMetrics(second);
     expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(second));
     expect(deterministicStageReceipt(first)).toEqual(deterministicStageReceipt(second));
 
     const baseline = (await Bun.file(
       new URL("../docs/bench/core-memory-2026-09-05.json", import.meta.url),
     ).json()) as { receipt: Pick<Receipt, (typeof LEGACY_CANONICAL_FIELDS)[number]> };
-    expect(legacyCanonicalReceipt(first)).toEqual(baseline.receipt);
+    expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(baseline.receipt));
   },
 );
