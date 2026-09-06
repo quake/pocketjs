@@ -40,7 +40,8 @@
       "candidate": ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"]
     }
   },
-  "candidate_report_path": "dist/bench/ppsspp-bench-2026-09-06T02-31-26-333Z.json",
+  "candidate_report_path": null,
+  "candidate_report_status": "not committed; metrics preserved in this receipt",
   "memory_scan": {
     "uncapped_arena_bump_bytes": 2649936,
     "min_pass_arena_bytes": 2883584,
