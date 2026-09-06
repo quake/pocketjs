@@ -99,11 +99,11 @@ are workload-phase proxies, not internal function timings. Use the measured
 tick duration for each phase so:
 
 ```text
-stage_layout_us + stage_animation_us == stage_tick_us
+stage_layout_us + stage_animation_us <= stage_tick_us
 ```
 
-for the measured ticks, allowing only integer timing values already returned by
-`Instant::as_micros()`.
+for the measured ticks. Each phase total is independently floored to microseconds,
+so the residual must be less than 2us.
 
 - [ ] **Step 4: Snapshot allocation counters after the measured workload.**
 
@@ -133,7 +133,7 @@ the checksum. The existing checksum assertion remains unchanged.
 **Files:**
 - Modify: `tests/core-memory-bench.test.ts`
 
-- [ ] **Step 1: Run the focused benchmark receipt test.**
+- [x] **Step 1: Run the focused benchmark receipt test.**
 
 ```bash
 bun test tests/core-memory-bench.test.ts
@@ -142,7 +142,7 @@ bun test tests/core-memory-bench.test.ts
 Expected: parser and receipt stability tests pass, including the existing
 canonical baseline comparison. Record the new profiling values from the output.
 
-- [ ] **Step 2: Run the core suite and receipt suite.**
+- [x] **Step 2: Run the core suite and receipt suite.**
 
 ```bash
 cargo test --manifest-path engine/core/Cargo.toml
@@ -153,15 +153,15 @@ git diff --check
 Expected: 129 core tests and all Bun tests pass. The only Rust output allowed
 is the existing `unused_mut` warning.
 
-- [ ] **Step 3: Confirm production scope.**
+- [x] **Step 3: Confirm production scope.**
 
 ```bash
-git diff --name-only HEAD~1..HEAD -- engine/core/src hosts/psp
+git diff --name-only b68923b..HEAD -- engine/core/src hosts/psp
 ```
 
 Expected: no files. Only the example and its test may change.
 
-- [ ] **Step 4: Commit the profiling instrumentation.**
+- [x] **Step 4: Commit the profiling instrumentation.**
 
 ```bash
 git add engine/core/examples/membench.rs tests/core-memory-bench.test.ts
@@ -173,13 +173,13 @@ stage output is diagnostic evidence for the next optimization design.
 
 ## Task 4: Final Review
 
-- [ ] **Step 1: Review the profiling contract.**
+- [x] **Step 1: Review the profiling contract.**
 
 Verify that stage fields are deterministic enough for comparison, timing totals
 are not confused with PSP `avg_work_us`, allocation values conserve against the
 existing receipt, and comments identify phase values as workload proxies.
 
-- [ ] **Step 2: Run the final benchmark manually.**
+- [x] **Step 2: Run the final benchmark manually.**
 
 ```bash
 cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet
@@ -193,7 +193,7 @@ candidates. Do not retain a code optimization in this task.
 - [x] Core tests: `cargo test --manifest-path engine/core/Cargo.toml` passed (129 tests, 0 failures; 0 doc-tests).
 - [x] Requested Bun suite: `bun test tests/core-frame-receipts.test.ts tests/core-memory-bench.test.ts tests/psp-bench-parser.test.ts tests/psp-bench.test.ts` passed (31 tests, 0 failures).
 - [x] `git diff --check` passed.
-- [x] `git diff --name-only HEAD~1..HEAD -- engine/core/src hosts/psp` returned no production core/host changes.
+- [x] `git diff --name-only b68923b..HEAD -- engine/core/src hosts/psp` returned no production core/host changes across the profiling implementation and documentation commits.
 - [x] Final receipt: `cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet` completed with stable allocation totals.
 
 Measured final receipt:
@@ -217,5 +217,7 @@ text_mode=atlas
 texture_mode=atlas
 drawlist_checksum=cc6a0b00efdba151
 ```
+
+Conservation: `43114 + 5 = 43119`, leaving a `1us` residual below `stage_tick_us=43120`; independently floored phase microseconds may sum to at most the tick total, with residual `<2us`.
 
 Interpretation: layout-phase tick time dominates; animation timing is only a few microseconds. Draw timing is reported separately, and allocation totals are stable.
