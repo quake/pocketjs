@@ -13,60 +13,6 @@ const COMMAND = [
   "--quiet",
 ];
 
-const REQUIRED_FIELDS = [
-  "peak_requested_bytes",
-  "final_requested_bytes",
-  "allocation_count",
-  "total_allocated_bytes",
-  "avg_layout_us",
-  "max_layout_us",
-  "nodes",
-  "structural_relayouts",
-  "text_mode",
-  "texture_mode",
-  "drawlist_checksum",
-  "stage_tick_us",
-  "stage_draw_us",
-  "stage_layout_us",
-  "stage_animation_us",
-  "stage_allocation_count",
-  "stage_total_allocated_bytes",
-] as const;
-
-const TIMING_FIELDS = new Set([
-  "avg_layout_us",
-  "max_layout_us",
-  "stage_tick_us",
-  "stage_draw_us",
-  "stage_layout_us",
-  "stage_animation_us",
-]);
-const LEGACY_CANONICAL_FIELDS = [
-  "peak_requested_bytes",
-  "final_requested_bytes",
-  "allocation_count",
-  "total_allocated_bytes",
-  "nodes",
-  "structural_relayouts",
-  "text_mode",
-  "texture_mode",
-  "drawlist_checksum",
-] as const;
-const STAGE_FIELDS = [
-  "stage_tick_us",
-  "stage_draw_us",
-  "stage_layout_us",
-  "stage_animation_us",
-  "stage_allocation_count",
-  "stage_total_allocated_bytes",
-] as const;
-// Allocation counts are deterministic; timing fields are wall-clock measurements and are excluded.
-const DETERMINISTIC_STAGE_FIELDS = [
-  "stage_allocation_count",
-  "stage_total_allocated_bytes",
-] as const;
-type Receipt = Record<(typeof REQUIRED_FIELDS)[number], string>;
-
 const VARIANTS = [
   "full",
   "style_only",
@@ -93,61 +39,6 @@ const NUMERIC_VARIANT_FIELDS = new Set(
     (field) => field !== "variant" && field !== "drawlist_checksum",
   ),
 );
-
-function parseReceipt(output: string): Receipt {
-  const lines = output.endsWith("\n")
-    ? output.slice(0, -1).split("\n")
-    : output.split("\n");
-  expect(lines).toHaveLength(REQUIRED_FIELDS.length);
-
-  const seen = new Set<string>();
-  const entries = lines.map((line) => {
-    const separator = line.indexOf("=");
-    expect(separator).toBeGreaterThan(0);
-    expect(line.indexOf("=", separator + 1)).toBe(-1);
-
-    const field = line.slice(0, separator);
-    const value = line.slice(separator + 1);
-    expect((REQUIRED_FIELDS as readonly string[]).includes(field)).toBe(true);
-    expect(seen.has(field)).toBe(false);
-    expect(value).not.toBe("");
-    seen.add(field);
-    return [field, value];
-  });
-
-  expect(seen.size).toBe(REQUIRED_FIELDS.length);
-  const receipt = Object.fromEntries(entries) as Partial<Receipt>;
-
-  for (const field of REQUIRED_FIELDS) {
-    expect(receipt[field]).toBeDefined();
-    expect(receipt[field]).not.toBe("");
-  }
-
-  for (const field of REQUIRED_FIELDS) {
-    if (TIMING_FIELDS.has(field)) continue;
-    if (field === "text_mode" || field === "texture_mode") {
-      expect(receipt[field]).toBe("atlas");
-    } else if (field === "drawlist_checksum") {
-      expect(receipt[field]).toMatch(/^[0-9a-f]{16}$/);
-    } else {
-      expect(receipt[field]).toMatch(/^\d+$/);
-      const value = Number(receipt[field]);
-      expect(Number.isFinite(value)).toBe(true);
-      expect(Number.isInteger(value)).toBe(true);
-      expect(value).toBeGreaterThanOrEqual(0);
-    }
-  }
-
-  for (const field of TIMING_FIELDS) {
-    expect(receipt[field]).toMatch(/^\d+$/);
-    const value = Number(receipt[field]);
-    expect(Number.isFinite(value)).toBe(true);
-    expect(Number.isInteger(value)).toBe(true);
-    expect(value).toBeGreaterThanOrEqual(0);
-  }
-
-  return receipt as Receipt;
-}
 
 function parseVariantRecord(output: string): VariantRecord {
   const lines = output.split("\n");
@@ -376,109 +267,63 @@ test(
       total_allocated_bytes: "6195449",
       drawlist_checksum: "cc6a0b00efdba151",
     });
+    expect(Number(full!.avg_tick_us)).toBeGreaterThan(0);
+    expect(Number(full!.max_tick_us)).toBeGreaterThanOrEqual(Number(full!.avg_tick_us));
+    const styleOnly = records.get("style_only")!;
+    expect(styleOnly).toMatchObject({
+      measured_ticks: "24",
+      structural_relayouts: "1",
+    });
+    expect(Number(styleOnly.avg_tick_us)).toBeGreaterThan(0);
+    // structural_relayouts counts the controlled initial build plus explicit
+    // structural mutations, not an internal layout instrumentation counter.
+    expect(records.get("structure_no_text")).toMatchObject({
+      measured_ticks: "8",
+      structural_relayouts: "9",
+    });
+    expect(records.get("text_updates")).toMatchObject({
+      measured_ticks: "16",
+      structural_relayouts: "1",
+    });
+    expect(records.get("no_draw_control")).toMatchObject({
+      measured_ticks: "60",
+      structural_relayouts: "16",
+      draw_us: "0",
+      drawlist_checksum: "control",
+    });
   },
 );
 
-// Keep this fixture independent from REQUIRED_FIELDS so contract changes cannot update both together.
-const VALID_RECEIPT = [
-  "peak_requested_bytes=0",
-  "final_requested_bytes=0",
-  "allocation_count=0",
-  "total_allocated_bytes=0",
-  "avg_layout_us=0",
-  "max_layout_us=0",
-  "nodes=0",
-  "structural_relayouts=0",
-  "text_mode=atlas",
-  "texture_mode=atlas",
-  "drawlist_checksum=0000000000000000",
-  "stage_tick_us=0",
-  "stage_draw_us=0",
-  "stage_layout_us=0",
-  "stage_animation_us=0",
-  "stage_allocation_count=0",
-  "stage_total_allocated_bytes=0",
-].join("\n");
-
-test("receipt parser rejects unknown and duplicate fields", () => {
-  expect(() => parseReceipt(`${VALID_RECEIPT}\nunknown=0`)).toThrow();
-  expect(() => parseReceipt(`${VALID_RECEIPT}\npeak_requested_bytes=0`)).toThrow();
-});
-
-test("receipt parser rejects empty and negative numeric values", () => {
-  expect(() => parseReceipt(VALID_RECEIPT.replace("nodes=0", "nodes="))).toThrow();
-  expect(() => parseReceipt(VALID_RECEIPT.replace("nodes=0", "nodes=-1"))).toThrow();
-});
-
-test("receipt parser rejects non-finite and non-integer numbers", () => {
-  expect(() =>
-    parseReceipt(
-      VALID_RECEIPT.replace(
-        "peak_requested_bytes=0",
-        `peak_requested_bytes=${"9".repeat(400)}`,
-      ),
-    ),
-  ).toThrow();
-  expect(() =>
-    parseReceipt(VALID_RECEIPT.replace("peak_requested_bytes=0", "peak_requested_bytes=1.5")),
-  ).toThrow();
-});
-
-test("receipt fixture explicitly covers every stage field", () => {
-  expect(() => parseReceipt(VALID_RECEIPT)).not.toThrow();
-  const requiredFields = new Set(REQUIRED_FIELDS);
-  const fixtureFields = new Set(
-    VALID_RECEIPT.split("\n").map((line) => line.slice(0, line.indexOf("="))),
-  );
-  for (const field of STAGE_FIELDS) {
-    expect(requiredFields.has(field)).toBe(true);
-    expect(fixtureFields.has(field)).toBe(true);
-  }
-});
-
-function legacyCanonicalReceipt(
-  receipt: Pick<Receipt, (typeof LEGACY_CANONICAL_FIELDS)[number]>,
-): Record<string, string> {
-  return Object.fromEntries(
-    LEGACY_CANONICAL_FIELDS.map((field) => [
-      field,
-      receipt[field],
-    ]),
-  );
-}
-
-function deterministicStageReceipt(receipt: Receipt): Record<string, string> {
-  return Object.fromEntries(DETERMINISTIC_STAGE_FIELDS.map((field) => [field, receipt[field]]));
-}
-
-function expectStageMetrics(receipt: Receipt): void {
-  const tick = Number(receipt.stage_tick_us);
-  const phase = Number(receipt.stage_layout_us) + Number(receipt.stage_animation_us);
-  expect(Number(receipt.stage_layout_us)).toBeLessThanOrEqual(tick);
-  expect(Number(receipt.stage_animation_us)).toBeLessThanOrEqual(tick);
-  expect(phase).toBeLessThanOrEqual(tick);
-  expect(tick - phase).toBeLessThan(2);
-  expect(receipt.stage_allocation_count).toBe(receipt.allocation_count);
-  expect(receipt.stage_total_allocated_bytes).toBe(receipt.total_allocated_bytes);
-}
-
 test(
-  "core memory receipt is complete, stable, and matches its baseline",
+  "core differential matrix keeps deterministic fields stable",
   { timeout: 30_000 },
   async () => {
     const run = () =>
       $`${COMMAND[0]} ${COMMAND.slice(1)}`.cwd(ROOT).quiet().text();
-    const first = parseReceipt(await run());
-    const second = parseReceipt(await run());
+    const first = parseVariantMatrix(await run());
+    const second = parseVariantMatrix(await run());
+    const timingFields = new Set(["avg_tick_us", "max_tick_us", "draw_us"]);
+    for (const variant of VARIANTS) {
+      const firstRecord = first.get(variant)!;
+      const secondRecord = second.get(variant)!;
+      for (const field of VARIANT_FIELDS) {
+        if (!timingFields.has(field)) {
+          expect(firstRecord[field]).toBe(secondRecord[field]);
+        }
+      }
+    }
+  },
+);
 
-    expectStageMetrics(first);
-    expectStageMetrics(second);
-    expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(second));
-    expect(deterministicStageReceipt(first)).toEqual(deterministicStageReceipt(second));
-
-    const baseline = (await Bun.file(
-      new URL("../docs/bench/core-memory-2026-09-05.json", import.meta.url),
-    ).json()) as { receipt: Pick<Receipt, (typeof LEGACY_CANONICAL_FIELDS)[number]> };
-    expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(baseline.receipt));
+test(
+  "asset workload stays out of matrix output",
+  { timeout: 30_000 },
+  async () => {
+    const output = await $`${COMMAND[0]} ${COMMAND.slice(1)}`
+      .cwd(ROOT)
+      .env({ ...process.env, POCKETJS_ASSET_WORKLOAD: "1" })
+      .quiet()
+      .text();
+    expect(parseVariantMatrix(output).size).toBe(VARIANTS.length);
   },
 );

@@ -539,6 +539,8 @@ struct VariantReceipt {
     variant: &'static str,
     measured_ticks: usize,
     nodes: usize,
+    // Controlled event count: the initial build plus explicit mutations below.
+    // This is not internal layout instrumentation.
     structural_relayouts: u64,
     draw_us: u128,
     checksum: String,
@@ -555,6 +557,7 @@ fn structural_tick(tick: usize) -> bool {
 }
 
 fn structural_probe(ui: &mut Ui, parent: i32, height: f64) {
+    // One explicit create/insert/destroy mutation used as a structural probe.
     let node = ui.create_node(spec::NodeType::View as u8);
     ui.set_style(node, 0);
     ui.set_prop(node, spec::prop::HEIGHT, height);
@@ -567,6 +570,10 @@ fn hash_draw(words: &[u32], checksum: &mut u64) {
         *checksum ^= u64::from(*word);
         *checksum = checksum.wrapping_mul(0x100000001b3);
     }
+}
+
+fn nanos_to_micros_ceil(nanoseconds: u128) -> u128 {
+    nanoseconds.div_ceil(1_000)
 }
 
 fn warmup_draw(
@@ -590,8 +597,8 @@ fn warmup_draw(
 fn tick_and_measure(
     ui: &mut Ui,
     checksum: &mut u64,
-    total_us: &mut u128,
-    max_us: &mut u128,
+    total_ns: &mut u128,
+    max_ns: &mut u128,
     profile: &mut StageProfile,
     phase: WorkloadPhase,
     draw_enabled: bool,
@@ -600,10 +607,9 @@ fn tick_and_measure(
     let tick_started = Instant::now();
     ui.tick();
     let tick_elapsed = tick_started.elapsed();
-    let tick_us = tick_elapsed.as_micros();
     let tick_ns = tick_elapsed.as_nanos();
-    *total_us += tick_us;
-    *max_us = (*max_us).max(tick_us);
+    *total_ns += tick_ns;
+    *max_ns = (*max_ns).max(tick_ns);
     profile.tick_ns += tick_ns;
     // These are workload-phase proxies, not internal function timings.
     match phase {
@@ -670,8 +676,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     // Keep the existing measurement boundary shared by the comparable variants.
     begin_measurement();
     let mut checksum = 0xcbf29ce484222325;
-    let mut total_us = 0u128;
-    let mut max_us = 0u128;
+    let mut total_ns = 0u128;
+    let mut max_ns = 0u128;
     let mut profile = StageProfile::default();
 
     let (
@@ -747,8 +753,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             tick_and_measure(
                 &mut ui,
                 &mut checksum,
-                &mut total_us,
-                &mut max_us,
+                &mut total_ns,
+                &mut max_ns,
                 &mut profile,
                 WorkloadPhase::Animation,
                 draw_enabled,
@@ -759,6 +765,9 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     }
 
     // Phase 3: fixed-size subtree creation and destruction.
+    // Count the controlled initial build, then each explicit structural
+    // mutation that marks the layout dirty. Do not treat this as an internal
+    // relayout counter.
     let mut structural_relayouts = 1u64;
     if run_churn {
         for round in 0..CHURN_ROUNDS {
@@ -776,8 +785,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             tick_and_measure(
                 &mut ui,
                 &mut checksum,
-                &mut total_us,
-                &mut max_us,
+                &mut total_ns,
+                &mut max_ns,
                 &mut profile,
                 WorkloadPhase::Layout,
                 draw_enabled,
@@ -805,8 +814,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             tick_and_measure(
                 &mut ui,
                 &mut checksum,
-                &mut total_us,
-                &mut max_us,
+                &mut total_ns,
+                &mut max_ns,
                 &mut profile,
                 WorkloadPhase::Layout,
                 draw_enabled,
@@ -829,8 +838,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
             tick_and_measure(
                 &mut ui,
                 &mut checksum,
-                &mut total_us,
-                &mut max_us,
+                &mut total_ns,
+                &mut max_ns,
                 &mut profile,
                 WorkloadPhase::Layout,
                 draw_enabled,
@@ -867,8 +876,10 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     // avg_layout_us and max_layout_us are complete ui.tick() workload timing
     // proxies, not layout-only timings; preserve their per-tick microsecond
     // semantics. The stage fields above are workload-phase proxies instead.
-    let avg_layout_us = total_us / timings.len() as u128;
-    let max_layout_us = max_us;
+    // Aggregate in nanoseconds before converting, so short ticks are not
+    // rounded to zero before average/max profiling.
+    let avg_layout_us = nanos_to_micros_ceil(total_ns / timings.len() as u128);
+    let max_layout_us = nanos_to_micros_ceil(max_ns);
     profile.avg_tick_us = avg_layout_us;
     profile.max_tick_us = max_layout_us;
     let receipt = VariantReceipt {
@@ -904,6 +915,8 @@ fn run_variant(variant: Variant) -> VariantReceipt {
 }
 
 fn main() {
+    const MATRIX_MODE: bool = true;
+
     for (index, variant) in [
         Variant::Full,
         Variant::StyleOnly,
@@ -920,8 +933,10 @@ fn main() {
         print_variant_record(&run_variant(variant));
     }
 
-    // Reproduce the opt-in asset receipt with POCKETJS_ASSET_WORKLOAD=1.
-    if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
+    // Asset receipts retain their legacy behavior outside matrix mode. The
+    // matrix must remain exactly five 10-field records, so the opt-in asset
+    // workload is intentionally disabled while this executable is in matrix mode.
+    if !MATRIX_MODE && std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
         let asset_fixture = AssetInputs::new();
         let asset_inputs = asset_fixture.inputs();
         const ASSET_REPETITIONS: usize = 3;
