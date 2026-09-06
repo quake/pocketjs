@@ -197,7 +197,10 @@ test("layout scratch discard receipt records the failed timing gate", async () =
   expect(value.candidate_source).toBe("temporary uncommitted patch");
   expect(value.candidate_reproducibility).toBe("not independently reproducible");
   expect(value.candidate_patch_artifact).toBeNull();
-  expect(value.candidate_files).toEqual(["engine/core/src/layout.rs"]);
+  expect(value.candidate_files).toEqual([
+    "engine/core/src/layout.rs",
+    "engine/core/src/tests.rs",
+  ]);
   expect(value.candidate_provenance_reason).toContain("3% gate");
   expect(value.candidate_provenance_reason).toContain("uncommitted production patch");
   expect(value.candidate_test_commands).toEqual([
