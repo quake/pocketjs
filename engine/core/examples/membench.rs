@@ -523,9 +523,11 @@ enum Variant {
 }
 
 struct VariantReceipt {
+    variant: &'static str,
     measured_ticks: usize,
     nodes: usize,
     structural_relayouts: u64,
+    draw_us: u128,
     checksum: String,
     profile: StageProfile,
 }
@@ -609,8 +611,9 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     const BURST_TICKS: usize = 12;
 
     // Fixture bytes, source strings, handles, churn ids, and timing state are
-    // prepared before measurement. Setup allocations are intentionally outside
-    // the workload receipt.
+    // prepared before measurement. Full and NoDrawControl share the existing
+    // boundary below, so Phase 1 tree setup and warm-up allocations are part
+    // of the workload receipt for both variants.
     let styles = style_blob();
     let atlas = texture_blob();
     let font_atlas = font_atlas_blob(0);
@@ -641,6 +644,7 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     handles.push(ui.upload_texture(&atlas, 16, 16, spec::psm::PSM_8888));
     let texture = handles[0];
 
+    // Keep the existing measurement boundary shared by the comparable variants.
     begin_measurement();
     let mut checksum = 0xcbf29ce484222325;
     let mut total_us = 0u128;
@@ -672,9 +676,9 @@ fn run_variant(variant: Variant) -> VariantReceipt {
         ui.set_image(image, texture);
         ui.insert_before(row, image, 0);
     }
-    let draw_enabled = match variant {
-        Variant::Full => true,
-        Variant::NoDrawControl => false,
+    let (variant_name, draw_enabled) = match variant {
+        Variant::Full => ("full", true),
+        Variant::NoDrawControl => ("no_draw_control", false),
         Variant::StyleOnly | Variant::StructureNoText | Variant::TextUpdates => {
             panic!("workload variant is not implemented")
         }
@@ -803,9 +807,11 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     profile.avg_tick_us = avg_layout_us;
     profile.max_tick_us = max_layout_us;
     let receipt = VariantReceipt {
+        variant: variant_name,
         measured_ticks: timings.len(),
         nodes,
         structural_relayouts,
+        draw_us: profile.draw_ns / 1_000,
         checksum: if draw_enabled {
             format!("{checksum:016x}")
         } else {
@@ -824,9 +830,10 @@ fn run_variant(variant: Variant) -> VariantReceipt {
 
 fn main() {
     let full = run_variant(Variant::Full);
+    assert_eq!(full.variant, "full");
     assert_eq!(full.measured_ticks, 60);
     println!("stage_tick_us={}", full.profile.tick_ns / 1_000);
-    println!("stage_draw_us={}", full.profile.draw_ns / 1_000);
+    println!("stage_draw_us={}", full.draw_us);
     println!("stage_layout_us={}", full.profile.layout_ns / 1_000);
     println!("stage_animation_us={}", full.profile.animation_ns / 1_000);
     println!("stage_allocation_count={}", full.profile.allocation_count);
