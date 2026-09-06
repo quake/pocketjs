@@ -348,7 +348,7 @@ test("Draw text scratch receipt links every gate to the committed baseline", asy
   expect(value.candidate).toBe("Task 2 private Draw walker text-run scratch");
   expect(value.candidate_git_revision).toBeNull();
   expect(value.code_retained).toBe(false);
-  expect(value.candidate_files).toEqual(["engine/core/src/draw.rs"]);
+  expect(value.candidate_files).toEqual(["engine/core/src/draw.rs", "engine/core/src/tests.rs"]);
   expect(value.candidate_source).toBe("temporary uncommitted patch");
   expect(value.candidate_reproducibility).toBe("not independently reproducible");
   expect(value.candidate_patch_artifact).toBeNull();
@@ -406,10 +406,16 @@ test("Draw text scratch receipt links every gate to the committed baseline", asy
   expect(value.comparison.arena_bump_bytes.candidate).toEqual([2649904, 2649904, 2649904]);
   expect(value.comparison.safe_arena_bytes.candidate).toBe(3670016);
   expect(value.comparison.drawlist_checksum.candidate).toEqual(["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"]);
-  expect(value.decision.checksum_unchanged).toBe(true);
-  expect(value.decision.arena_regression).toBe(false);
-  expect(value.decision.safe_arena_regression).toBe(false);
-  expect(value.decision.max_work_regression).toBe(false);
+  const checksumUnchanged = value.comparison.drawlist_checksum.candidate.every(
+    (checksum: string, index: number) => checksum === value.comparison.drawlist_checksum.baseline[index],
+  );
+  const arenaRegression = mean(value.comparison.arena_bump_bytes.candidate) > mean(value.comparison.arena_bump_bytes.baseline);
+  const safeArenaRegression = value.comparison.safe_arena_bytes.candidate > value.comparison.safe_arena_bytes.baseline;
+  const maxWorkRegression = mean(value.comparison.max_work_us.candidate) > mean(value.comparison.max_work_us.baseline);
+  expect(value.decision.checksum_unchanged).toBe(checksumUnchanged);
+  expect(value.decision.arena_regression).toBe(arenaRegression);
+  expect(value.decision.safe_arena_regression).toBe(safeArenaRegression);
+  expect(value.decision.max_work_regression).toBe(maxWorkRegression);
   expect(value.decision.threshold_math.required_improvement_percent).toBe(3);
   expect(value.decision.avg_work_improvement_percent).toBeCloseTo(
     ((mean(baseline.stats.metric_arrays.avg_work_us) - mean(value.stats.metric_arrays.avg_work_us)) /

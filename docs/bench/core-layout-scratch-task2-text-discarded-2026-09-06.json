@@ -17,7 +17,7 @@
   "candidate_reproducibility": "not independently reproducible",
   "candidate_patch_artifact": null,
   "candidate_provenance_reason": "The candidate was reverted because neither timing metric met the 3% gate. Its uncommitted production patch has no independently reproducible revision or artifact.",
-  "candidate_files": ["engine/core/src/draw.rs"],
+  "candidate_files": ["engine/core/src/draw.rs", "engine/core/src/tests.rs"],
   "code_retained": false,
   "candidate_git_revision": null,
   "candidate_test_commands": [
