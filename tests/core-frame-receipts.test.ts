@@ -181,3 +181,33 @@ test("layout scratch baseline records canonical provenance and measurements", as
   ]);
   expect(value.stats.report_path).toMatch(/^dist\/bench\/ppsspp-bench-.*\.json$/);
 });
+
+test("layout scratch discard receipt records the failed timing gate", async () => {
+  const value = await receipt("core-layout-scratch-discarded-2026-09-06.json");
+
+  expect(value.status).toBe("DISCARDED");
+  expect(value.candidate).toBe("Task 2 reusable layout readback slot scratch");
+  expect(value.plan).toBe("docs/superpowers/plans/2026-09-06-layout-scratch-optimizations.md");
+  expect(value.baseline_receipt).toBe("docs/bench/core-layout-scratch-baseline-2026-09-06.json");
+  assertNoRetainedProductionCandidate(value);
+  expect(value.candidate_source).toBe("temporary uncommitted patch");
+  expect(value.candidate_reproducibility).toBe("not independently reproducible");
+  expect(value.candidate_patch_artifact).toBeNull();
+  expect(value.candidate_files).toEqual(["engine/core/src/layout.rs"]);
+  expect(value.decision.threshold).toContain("3%");
+  expect(value.decision.avg_work_improvement_percent).toBe(0.0641);
+  expect(value.decision.avg_render_improvement_percent).toBe(0);
+  expect(value.decision.checksum_unchanged).toBe(true);
+  expect(value.decision.arena_regression).toBe(false);
+  expect(value.comparison.avg_work_us.candidate).toEqual([4679, 4679, 4679]);
+  expect(value.comparison.avg_render_us.candidate).toEqual([581, 581, 581]);
+  expect(value.comparison.arena_bump_bytes.candidate).toEqual([2649904, 2649904, 2649904]);
+  expect(value.comparison.safe_arena_bytes).toEqual({ baseline: 3670016, candidate: 3670016 });
+  expect(value.comparison.drawlist_checksum.candidate).toEqual([
+    "c88e7bcedc5d42a5",
+    "c88e7bcedc5d42a5",
+    "c88e7bcedc5d42a5",
+  ]);
+  expect(value.memory_scan.attempts).toHaveLength(3);
+  expect(value.benchmark_report_path).toMatch(/^dist\/bench\/ppsspp-bench-.*\.json$/);
+});
