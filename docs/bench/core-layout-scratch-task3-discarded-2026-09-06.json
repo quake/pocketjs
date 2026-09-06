@@ -49,7 +49,7 @@
   "ppsspp_revision": "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
   "toolchain": { "bun": "1.3.13" },
   "reproducibility": {
-    "benchmark_git_revision": "810a9b1",
+    "benchmark_git_revision": "810a9b1e202e606e0a4ef0fc0189dcb1046b4ccb",
     "ppsspp": {
       "revision": "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa",
       "headless_path": "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
@@ -207,6 +207,6 @@
       "candidate": ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"]
     }
   },
-  "candidate_report_path": "dist/bench/ppsspp-bench-2026-09-06T03-31-57-880Z.json",
-  "candidate_report_status": "retained as benchmark evidence; production candidate not retained"
+  "candidate_report_path": null,
+  "candidate_report_status": "unavailable; measured values are preserved in this receipt"
 }
