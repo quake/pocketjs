@@ -390,6 +390,83 @@ test("layout text scratch discarded receipt uses the committed baseline", async 
   );
 });
 
+test("layout structure scratch receipt proves safe ownership and rejected gates", async () => {
+  const [value, baseline] = await Promise.all([
+    receipt("core-layout-structure-scratch-task4-discarded-2026-09-06.json"),
+    receipt("core-layout-scratch-baseline-2026-09-06.json"),
+  ]);
+  expect(value.schema_version).toBe(1);
+  expect(value.status).toBe("DISCARDED");
+  expect(value.plan).toBe(baseline.plan);
+  expect(value.baseline_receipt).toBe(baselineReceiptName);
+  expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.git_revision).toBeNull();
+  expect(value.candidate_git_revision).toBeNull();
+  expect(value.code_retained).toBe(false);
+  expect(value.candidate_files).toEqual(["engine/core/src/layout.rs", "engine/core/src/tests.rs"]);
+  expect(value.candidate).toBe("Task 4 owner-local structure relayout scratch");
+  expect(value.candidate_source).toBe("temporary uncommitted patch");
+  expect(value.candidate_reproducibility).toBe("not independently reproducible");
+  expect(value.candidate_patch_artifact).toBeNull();
+  expect(value.ownership_review).toEqual({
+    surface_slots_owner: "LayoutEngine local Vec<u32>, one per independent output root",
+    run_scratch_owner: "LayoutEngine local String, cleared before each collected text run",
+    measure_ctx: "owns shaped (width, height) by value; no scratch borrow survives shaping",
+    recursive_kids: "rejected; one reusable vector cannot span recursive build calls",
+    taffy_measure_ctx_move: "not required",
+    unsafe_or_global_storage: false,
+    public_api_change: false,
+    decision: "SAFE SUBSET, DISCARDED BY TIMING AND ARENA GATES",
+  });
+  expect(value.tdd).toEqual({
+    focused_command: "cargo test --manifest-path engine/core/Cargo.toml repeated_structure_relayouts_preserve_rounded_layout_and_text_provider_state",
+    red: { result: "FAIL", reason: "missing LayoutEngine::surface_slots and LayoutEngine::run_scratch fields" },
+    green: { result: "PASS", tests: 1, before_benchmark_discard: true },
+    test_behavior: [
+      "rounded primary and auxiliary layouts were unchanged across three structure relayouts",
+      "primary and auxiliary text_native provider state was unchanged",
+      "each independent LayoutEngine reused its surface and text scratch capacities",
+    ],
+  });
+  expect(value.stats.metric_arrays).toEqual({
+    avg_work_us: [4681, 4681, 4681],
+    max_work_us: [62598, 62598, 62598],
+    avg_render_us: [581, 581, 581],
+    arena_bump_bytes: [2649936, 2649936, 2649936],
+    checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"],
+  });
+  expect(value.comparison).toEqual({
+    avg_work_us: { baseline: baseline.stats.metric_arrays.avg_work_us, candidate: [4681, 4681, 4681] },
+    avg_render_us: { baseline: baseline.stats.metric_arrays.avg_render_us, candidate: [581, 581, 581] },
+    max_work_us: { baseline: baseline.stats.metric_arrays.max_work_us, candidate: [62598, 62598, 62598] },
+    arena_bump_bytes: { baseline: baseline.stats.metric_arrays.arena_bump_bytes, candidate: [2649936, 2649936, 2649936] },
+    safe_arena_bytes: { baseline: baseline.stats.safe_arena_bytes, candidate: 3670016 },
+    drawlist_checksum: { baseline: baseline.stats.checksum_samples, candidate: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"] },
+  });
+  expect(value.decision).toEqual({
+    status: "DISCARDED",
+    threshold: "at least 3% improvement in avg_work_us or avg_render_us",
+    avg_work_improvement_percent: 0.02135839384963775,
+    avg_render_improvement_percent: 0,
+    checksum_unchanged: true,
+    arena_regression: true,
+    safe_arena_regression: false,
+    max_work_regression: false,
+    threshold_math: {
+      avg_work_baseline_mean_us: 4682,
+      avg_work_candidate_mean_us: 4681,
+      avg_work_improvement_percent: 0.02135839384963775,
+      avg_render_baseline_mean_us: 581,
+      avg_render_candidate_mean_us: 581,
+      avg_render_improvement_percent: 0,
+      required_improvement_percent: 3,
+    },
+    reason: "Discarded: neither timing metric met the 3% improvement gate and arena high-water increased by 32 bytes; checksum, safe arena, and layout/text correctness did not regress.",
+  });
+  expect(value.command).toBe("bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan");
+  expect(value.candidate_report_path).toBe("dist/bench/ppsspp-bench-2026-09-06T04-57-08-711Z.json");
+});
+
 test("Draw text scratch receipt links every gate to the committed baseline", async () => {
   const [value, baseline] = await Promise.all([
     receipt("core-layout-scratch-task2-text-discarded-2026-09-06.json"),
