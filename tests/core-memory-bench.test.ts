@@ -41,6 +41,25 @@ const TIMING_FIELDS = new Set([
   "stage_layout_us",
   "stage_animation_us",
 ]);
+const LEGACY_CANONICAL_FIELDS = [
+  "peak_requested_bytes",
+  "final_requested_bytes",
+  "allocation_count",
+  "total_allocated_bytes",
+  "nodes",
+  "structural_relayouts",
+  "text_mode",
+  "texture_mode",
+  "drawlist_checksum",
+] as const;
+const STAGE_FIELDS = [
+  "stage_tick_us",
+  "stage_draw_us",
+  "stage_layout_us",
+  "stage_animation_us",
+  "stage_allocation_count",
+  "stage_total_allocated_bytes",
+] as const;
 type Receipt = Record<(typeof REQUIRED_FIELDS)[number], string>;
 
 function parseReceipt(output: string): Receipt {
@@ -98,11 +117,25 @@ function parseReceipt(output: string): Receipt {
   return receipt as Receipt;
 }
 
-const VALID_RECEIPT = REQUIRED_FIELDS.map((field) => {
-  if (field === "text_mode" || field === "texture_mode") return `${field}=atlas`;
-  if (field === "drawlist_checksum") return `${field}=0000000000000000`;
-  return `${field}=0`;
-}).join("\n");
+const VALID_RECEIPT = [
+  "peak_requested_bytes=0",
+  "final_requested_bytes=0",
+  "allocation_count=0",
+  "total_allocated_bytes=0",
+  "avg_layout_us=0",
+  "max_layout_us=0",
+  "nodes=0",
+  "structural_relayouts=0",
+  "text_mode=atlas",
+  "texture_mode=atlas",
+  "drawlist_checksum=0000000000000000",
+  "stage_tick_us=0",
+  "stage_draw_us=0",
+  "stage_layout_us=0",
+  "stage_animation_us=0",
+  "stage_allocation_count=0",
+  "stage_total_allocated_bytes=0",
+].join("\n");
 
 test("receipt parser rejects unknown and duplicate fields", () => {
   expect(() => parseReceipt(`${VALID_RECEIPT}\nunknown=0`)).toThrow();
@@ -130,16 +163,8 @@ test("receipt parser rejects non-finite and non-integer numbers", () => {
 
 test("receipt parser accepts all stage fields as non-negative integers", () => {
   const receipt = parseReceipt(VALID_RECEIPT);
-  const stageFields = [
-    "stage_tick_us",
-    "stage_draw_us",
-    "stage_layout_us",
-    "stage_animation_us",
-    "stage_allocation_count",
-    "stage_total_allocated_bytes",
-  ] as const;
 
-  for (const field of stageFields) {
+  for (const field of STAGE_FIELDS) {
     expect(receipt[field]).toMatch(/^\d+$/);
     expect(Number.isInteger(Number(receipt[field]))).toBe(true);
     expect(Number(receipt[field])).toBeGreaterThanOrEqual(0);
@@ -150,13 +175,17 @@ test("receipt parser accepts all stage fields as non-negative integers", () => {
   }
 });
 
-function canonicalReceipt(receipt: Receipt): Partial<Receipt> {
+function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
   return Object.fromEntries(
-    REQUIRED_FIELDS.filter((field) => !TIMING_FIELDS.has(field)).map((field) => [
+    LEGACY_CANONICAL_FIELDS.map((field) => [
       field,
       receipt[field],
     ]),
   );
+}
+
+function stageReceipt(receipt: Receipt): Record<string, string> {
+  return Object.fromEntries(STAGE_FIELDS.map((field) => [field, receipt[field]]));
 }
 
 test(
@@ -168,11 +197,12 @@ test(
     const first = parseReceipt(await run());
     const second = parseReceipt(await run());
 
-    expect(canonicalReceipt(first)).toEqual(canonicalReceipt(second));
+    expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(second));
+    expect(stageReceipt(first)).toEqual(stageReceipt(second));
 
     const baseline = (await Bun.file(
       new URL("../docs/bench/core-memory-2026-09-05.json", import.meta.url),
-    ).json()) as { receipt: Receipt };
-    expect(canonicalReceipt(first)).toEqual(canonicalReceipt(baseline.receipt));
+    ).json()) as { receipt: Pick<Receipt, (typeof LEGACY_CANONICAL_FIELDS)[number]> };
+    expect(legacyCanonicalReceipt(first)).toEqual(baseline.receipt);
   },
 );
