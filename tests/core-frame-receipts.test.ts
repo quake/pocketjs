@@ -136,13 +136,46 @@ test("text discard receipt records uncommitted, unreproducible provenance", asyn
 });
 
 test("3D receipt records the inactive motions workload blocker", async () => {
-  const value = await receipt("core-frame-task3-3d-unmeasured-2026-09-06.json");
+  const [value, baseline] = await Promise.all([
+    receipt("core-frame-task3-3d-unmeasured-2026-09-06.json"),
+    receipt("core-frame-baseline-2026-09-06.json"),
+  ]);
 
+  expect(value.schema_version).toBe(1);
   expect(value.status).toBe("UNMEASURED");
+  expect(value.plan).toBe(baseline.plan);
+  expect(value.baseline_receipt).toBe(coreFrameBaselineReceiptName);
+  expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.ppsspp_revision).toBe(baseline.ppsspp_revision);
+  expect(value.toolchain.bun).toBe(baseline.toolchain.bun);
+  expect(value.reproducibility.benchmark_git_revision).toBe(value.git_revision);
+  expect(value.candidate).toBe("owner-local paint_3d items and tex_cells capacity reuse");
   assertNoRetainedProductionCandidate(value);
+  expect(value.candidate_source).toContain("ownership inspection only");
+  expect(value.candidate_reproducibility).toContain("rejected before implementation");
+  expect(value.candidate_patch_artifact).toBeNull();
+  expect(value.ownership_review).toEqual(expect.objectContaining({
+    unsafe: false,
+    decision: expect.stringContaining("REJECTED WITHOUT PRODUCTION CODE"),
+  }));
+  expect(value.tdd).toEqual({
+    status: "NOT APPLICABLE",
+    reason: "No concrete production candidate was implemented, so no focused perspective ordering/checksum regression test was needed.",
+    red: null,
+    green: null,
+  });
+  expect(value.candidate_test_commands).toContain("bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan");
+  expect(value.workload).toEqual({ app: "motions", framework: "solid", samples: 3, perspective_active: false });
+  expect(value.decision).toEqual({
+    status: "REJECTED",
+    reason: "Ownership is safe for local use, but Walker is recreated per build_root and the required motions workload is unavailable. No 3D timing, memory, or checksum claim can be made, so no production code is retained.",
+    timing_claim: null,
+    memory_claim: null,
+    checksum_claim: null,
+  });
+  expect(value.blocker.substitute_workload_used).toBe(false);
   expect(value.error).toBe("unknown app motions");
   expect(value.reason).toContain("No active perspective workload");
-  expect(value.reason).toContain("not retained");
 });
 
 test("layout scratch baseline records canonical provenance and measurements", async () => {
