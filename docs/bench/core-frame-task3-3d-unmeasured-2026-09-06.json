@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "UNMEASURED",
+  "candidate": "remove paint_3d root.children clone",
+  "plan": "docs/superpowers/plans/2026-09-06-core-frame-optimizations.md",
+  "baseline_receipt": "docs/bench/core-frame-baseline-2026-09-06.json",
+  "candidate_git_revision": null,
+  "candidate_files": [
+    "engine/core/src/draw.rs"
+  ],
+  "code_retained": false,
+  "command": "bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan",
+  "error": "unknown app motions",
+  "reason": "No active perspective workload exists in the current runner specs, so no 3% decision can be made. The candidate was not retained; no host-specific runner or app code was added because the scope is core-only."
+}
