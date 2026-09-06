@@ -508,6 +508,31 @@ struct StageProfile {
     total_allocated_bytes: usize,
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Copy)]
+enum Variant {
+    Full,
+    StyleOnly,
+    StructureNoText,
+    TextUpdates,
+    NoDrawControl,
+}
+
+struct VariantReceipt {
+    peak_requested_bytes: usize,
+    final_requested_bytes: usize,
+    allocation_count: usize,
+    total_allocated_bytes: usize,
+    avg_tick_us: u128,
+    max_tick_us: u128,
+    measured_ticks: usize,
+    nodes: usize,
+    structural_relayouts: u64,
+    draw_us: u128,
+    checksum: String,
+    profile: StageProfile,
+}
+
 enum WorkloadPhase {
     Animation,
     Layout,
@@ -548,6 +573,7 @@ fn tick_and_measure(
     max_us: &mut u128,
     profile: &mut StageProfile,
     phase: WorkloadPhase,
+    draw_enabled: bool,
 ) {
     let tick_started = Instant::now();
     ui.tick();
@@ -563,18 +589,20 @@ fn tick_and_measure(
         WorkloadPhase::Layout => profile.layout_ns += tick_ns,
     }
 
-    let draw_started = Instant::now();
-    let words = &ui.draw().words;
-    let draw_ns = draw_started.elapsed().as_nanos();
-    assert!(
-        words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
-        "benchmark draw must emit atlas-backed glyphs"
-    );
-    hash_draw(words, checksum);
-    profile.draw_ns += draw_ns;
+    if draw_enabled {
+        let draw_started = Instant::now();
+        let words = &ui.draw().words;
+        let draw_ns = draw_started.elapsed().as_nanos();
+        assert!(
+            words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
+            "benchmark draw must emit atlas-backed glyphs"
+        );
+        hash_draw(words, checksum);
+        profile.draw_ns += draw_ns;
+    }
 }
 
-fn main() {
+fn run_variant(variant: Variant) -> VariantReceipt {
     const STEADY_TICKS: usize = 24;
     const CHURN_ROUNDS: usize = 8;
     const CHURN_SIZE: usize = 4;
@@ -645,7 +673,16 @@ fn main() {
         ui.set_image(image, texture);
         ui.insert_before(row, image, 0);
     }
-    draw_and_hash(&mut ui, &mut checksum);
+    let draw_enabled = match variant {
+        Variant::Full => true,
+        Variant::NoDrawControl => false,
+        Variant::StyleOnly | Variant::StructureNoText | Variant::TextUpdates => {
+            panic!("workload variant is not implemented")
+        }
+    };
+    if draw_enabled {
+        draw_and_hash(&mut ui, &mut checksum);
+    }
 
     // Phase 2: steady style-only ticks.
     for i in 0..STEADY_TICKS {
@@ -657,6 +694,7 @@ fn main() {
             &mut max_us,
             &mut profile,
             WorkloadPhase::Animation,
+            draw_enabled,
         );
         timings.push(i);
     }
@@ -682,6 +720,7 @@ fn main() {
             &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
+            draw_enabled,
         );
         structural_relayouts += 1;
         timings.push(STEADY_TICKS + round);
@@ -707,6 +746,7 @@ fn main() {
             &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
+            draw_enabled,
         );
         timings.push(STEADY_TICKS + CHURN_ROUNDS + i);
     }
@@ -727,6 +767,7 @@ fn main() {
             &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
+            draw_enabled,
         );
         timings.push(STEADY_TICKS + CHURN_ROUNDS + TEXT_TICKS + i);
     }
@@ -753,36 +794,65 @@ fn main() {
     let phase_us = stage_layout_us + stage_animation_us;
     assert!(phase_us <= stage_tick_us);
     assert!(stage_tick_us - phase_us < 2);
-    let stage_draw_us = profile.draw_ns / 1_000;
     // avg_layout_us and max_layout_us are complete ui.tick() workload timing
     // proxies, not layout-only timings; preserve their per-tick microsecond
     // semantics. The stage fields above are workload-phase proxies instead.
     let avg_layout_us = total_us / timings.len() as u128;
     let max_layout_us = max_us;
-    println!("stage_tick_us={stage_tick_us}");
-    println!("stage_draw_us={stage_draw_us}");
-    println!("stage_layout_us={stage_layout_us}");
-    println!("stage_animation_us={stage_animation_us}");
-    println!("stage_allocation_count={}", profile.allocation_count);
+    let receipt = VariantReceipt {
+        peak_requested_bytes: PEAK.load(Ordering::Relaxed),
+        final_requested_bytes: LIVE.load(Ordering::Relaxed),
+        allocation_count,
+        total_allocated_bytes,
+        avg_tick_us: avg_layout_us,
+        max_tick_us: max_layout_us,
+        measured_ticks: timings.len(),
+        nodes,
+        structural_relayouts,
+        draw_us: if draw_enabled {
+            profile.draw_ns / 1_000
+        } else {
+            0
+        },
+        checksum: if draw_enabled {
+            format!("{checksum:016x}")
+        } else {
+            String::from("control")
+        },
+        profile,
+    };
+    if draw_enabled {
+        assert_eq!(
+            receipt.checksum, "cc6a0b00efdba151",
+            "deterministic benchmark drawlist changed"
+        );
+    }
+    receipt
+}
+
+fn main() {
+    let full = run_variant(Variant::Full);
+    assert_eq!(full.measured_ticks, 60);
+    println!("stage_tick_us={}", full.profile.tick_ns / 1_000);
+    println!("stage_draw_us={}", full.draw_us);
+    println!("stage_layout_us={}", full.profile.layout_ns / 1_000);
+    println!("stage_animation_us={}", full.profile.animation_ns / 1_000);
+    println!("stage_allocation_count={}", full.profile.allocation_count);
     println!(
         "stage_total_allocated_bytes={}",
-        profile.total_allocated_bytes
+        full.profile.total_allocated_bytes
     );
-    println!("peak_requested_bytes={}", PEAK.load(Ordering::Relaxed));
-    println!("final_requested_bytes={}", LIVE.load(Ordering::Relaxed));
-    println!("allocation_count={allocation_count}");
-    println!("total_allocated_bytes={total_allocated_bytes}");
-    println!("avg_layout_us={avg_layout_us}");
-    println!("max_layout_us={max_layout_us}");
-    println!("nodes={nodes}");
-    println!("structural_relayouts={structural_relayouts}");
+    println!("peak_requested_bytes={}", full.peak_requested_bytes);
+    println!("final_requested_bytes={}", full.final_requested_bytes);
+    println!("allocation_count={}", full.allocation_count);
+    println!("total_allocated_bytes={}", full.total_allocated_bytes);
+    println!("avg_layout_us={}", full.avg_tick_us);
+    println!("max_layout_us={}", full.max_tick_us);
+    println!("nodes={}", full.nodes);
+    println!("structural_relayouts={}", full.structural_relayouts);
     println!("text_mode=atlas");
     println!("texture_mode=atlas");
-    println!("drawlist_checksum={checksum:016x}");
-    assert_eq!(
-        checksum, 0xcc6a0b00efdba151,
-        "deterministic benchmark drawlist changed"
-    );
+    println!("drawlist_checksum={}", full.checksum);
 
     // Reproduce the opt-in asset receipt with POCKETJS_ASSET_WORKLOAD=1.
     if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
