@@ -180,10 +180,10 @@ test("3D receipt records the inactive motions workload blocker", async () => {
   expect(value.candidate).toBe("owner-local `paint_3d` `items`/`tex_cells` capacity reuse");
   assertNoRetainedProductionCandidate(value);
   expect(value.candidate_files).toEqual(["engine/core/src/draw.rs"]);
-  expect(value.candidate_source).toBe("ownership inspection only; no production patch or test file changed");
+  expect(value.candidate_source).toBe("ownership inspection only; no production patch or candidate-focused perspective test changed or needed; receipt-integrity test intentionally changed");
   expect(value.candidate_reproducibility).toBe("not applicable; candidate was rejected before implementation");
   expect(value.candidate_patch_artifact).toBeNull();
-  expect(value.candidate_provenance_reason).toBe("No production patch or test file was changed; the candidate was rejected after ownership inspection because no reusable cross-frame owner or reproducible 3D workload exists.");
+  expect(value.candidate_provenance_reason).toBe("No production patch was changed; no candidate-focused perspective test was changed or needed, while the receipt-integrity test was intentionally changed. The candidate was rejected because the required `motions` workload is absent from the current benchmark registry, so this run cannot make a 3D performance decision.");
   expect(value.candidate_report_path).toBeNull();
   expect(value.candidate_report_status).toBe("unavailable; no workload was executed");
   expect(value.ownership_review).toEqual({
@@ -194,7 +194,7 @@ test("3D receipt records the inactive motions workload blocker", async () => {
     stable_insertion_order: "items.sort_by uses stable sort semantics for equal depths; tex cell insertion sort is stable and scoped to each mesh",
     texture_batching: "one Item3::TexMesh remains per image; globally sorting cells would break consecutive texture batching",
     unsafe: false,
-    decision: "SAFE LOCALLY, REJECTED WITHOUT PRODUCTION CODE because no reusable cross-frame owner or reproducible 3D measurement exists",
+    decision: "SAFE LOCALLY, REJECTED WITHOUT PRODUCTION CODE because Walker has no reusable cross-frame owner and the required `motions` workload is absent from the current benchmark registry",
   });
   expect(value.tdd).toEqual({
     status: "NOT APPLICABLE",
@@ -220,7 +220,7 @@ test("3D receipt records the inactive motions workload blocker", async () => {
   expect(value.reason).toBe("No active perspective workload exists in the current runner specs, so no 3D decision can be made. The candidate was rejected without production code and no substitute workload was used.");
   expect(value.decision).toEqual({
     status: "REJECTED",
-    reason: "Ownership is safe for local use, but Walker is recreated per build_root and the required motions workload is unavailable. No 3D timing, memory, or checksum claim can be made, so no production code is retained.",
+    reason: "Ownership is safe for local use, but Walker is recreated per build_root and the required `motions` workload is absent from the current benchmark registry, so this run cannot make a 3D performance decision. No 3D timing, memory, or checksum claim is made, and no production code is retained.",
     timing_claim: null,
     memory_claim: null,
     checksum_claim: null,

@@ -47,10 +47,10 @@
   "candidate_files": [
     "engine/core/src/draw.rs"
   ],
-  "candidate_source": "ownership inspection only; no production patch or test file changed",
+  "candidate_source": "ownership inspection only; no production patch or candidate-focused perspective test changed or needed; receipt-integrity test intentionally changed",
   "candidate_reproducibility": "not applicable; candidate was rejected before implementation",
   "candidate_patch_artifact": null,
-  "candidate_provenance_reason": "No production patch or test file was changed; the candidate was rejected after ownership inspection because no reusable cross-frame owner or reproducible 3D workload exists.",
+  "candidate_provenance_reason": "No production patch was changed; no candidate-focused perspective test was changed or needed, while the receipt-integrity test was intentionally changed. The candidate was rejected because the required `motions` workload is absent from the current benchmark registry, so this run cannot make a 3D performance decision.",
   "candidate_report_path": null,
   "candidate_report_status": "unavailable; no workload was executed",
   "code_retained": false,
@@ -62,7 +62,7 @@
     "stable_insertion_order": "items.sort_by uses stable sort semantics for equal depths; tex cell insertion sort is stable and scoped to each mesh",
     "texture_batching": "one Item3::TexMesh remains per image; globally sorting cells would break consecutive texture batching",
     "unsafe": false,
-    "decision": "SAFE LOCALLY, REJECTED WITHOUT PRODUCTION CODE because no reusable cross-frame owner or reproducible 3D measurement exists"
+    "decision": "SAFE LOCALLY, REJECTED WITHOUT PRODUCTION CODE because Walker has no reusable cross-frame owner and the required `motions` workload is absent from the current benchmark registry"
   },
   "tdd": {
     "status": "NOT APPLICABLE",
@@ -93,7 +93,7 @@
   ],
   "decision": {
     "status": "REJECTED",
-    "reason": "Ownership is safe for local use, but Walker is recreated per build_root and the required motions workload is unavailable. No 3D timing, memory, or checksum claim can be made, so no production code is retained.",
+    "reason": "Ownership is safe for local use, but Walker is recreated per build_root and the required `motions` workload is absent from the current benchmark registry, so this run cannot make a 3D performance decision. No 3D timing, memory, or checksum claim is made, and no production code is retained.",
     "timing_claim": null,
     "memory_claim": null,
     "checksum_claim": null
