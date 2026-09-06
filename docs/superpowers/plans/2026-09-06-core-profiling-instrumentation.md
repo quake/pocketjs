@@ -60,10 +60,10 @@ Add a small benchmark-local structure:
 ```rust
 #[derive(Default)]
 struct StageProfile {
-    tick_us: u128,
-    draw_us: u128,
-    layout_us: u128,
-    animation_us: u128,
+    tick_ns: u128,
+    draw_ns: u128,
+    layout_ns: u128,
+    animation_ns: u128,
     allocation_count: usize,
     total_allocated_bytes: usize,
 }
@@ -73,37 +73,45 @@ Keep it local to the example. Do not export it from the core library.
 
 - [x] **Step 2: Instrument the existing tick/draw boundary.**
 
-Change `tick_and_measure` to accept `&mut StageProfile`. Measure the existing
-`ui.tick()` duration as `tick_us`, measure `ui.draw()` separately as `draw_us`,
-and preserve the current checksum and glyph assertions. Do not double-count the
-existing `total_us`: it must remain the full tick timing used by the current
-`avg_layout_us` receipt field.
+Change `tick_and_measure` to accept `&mut StageProfile`. Accumulate each phase's
+`Duration::as_nanos()` value in the nanosecond fields, and convert the aggregate
+values once when producing the four stage `*_us` fields. Measure `ui.draw()` in
+the same way and preserve the current checksum and glyph assertions. Do not
+double-count the existing `total_us`: it must remain the full `ui.tick()` timing
+used by the legacy `avg_layout_us` receipt field.
 
 Use the existing `Instant` timing style:
 
 ```rust
 let started = Instant::now();
 ui.tick();
-profile.tick_us += started.elapsed().as_micros();
+let tick_elapsed = started.elapsed();
+profile.tick_ns += tick_elapsed.as_nanos();
 let started = Instant::now();
 let words = &ui.draw().words;
-profile.draw_us += started.elapsed().as_micros();
+profile.draw_ns += started.elapsed().as_nanos();
 ```
+
+The six timing receipt fields are emitted in microseconds: the four stage
+fields are converted once from aggregate nanoseconds, while `avg_layout_us`
+and `max_layout_us` preserve their legacy full-`ui.tick()` per-tick microsecond
+semantics.
 
 - [x] **Step 3: Attribute layout and animation sub-stages without changing core behavior.**
 
 Keep `ui.tick()` as the only production operation. Use the existing workload
 phase boundaries to accumulate stage labels: structural/text/burst ticks are
-`layout_us`, steady style-only ticks are `animation_us`. Document that these
+`layout_ns`, steady style-only ticks are `animation_ns`. Document that these
 are workload-phase proxies, not internal function timings. Use the measured
-tick duration for each phase so:
+tick duration for each phase, accumulating nanoseconds before the single output
+conversion, so:
 
 ```text
 stage_layout_us + stage_animation_us <= stage_tick_us
 ```
 
-for the measured ticks. Each phase total is independently floored to microseconds,
-so the residual must be less than 2us.
+for the measured ticks. Each phase total is independently floored to microseconds
+at output, and the bounded residual must be less than 2us.
 
 - [x] **Step 4: Snapshot allocation counters after the measured workload.**
 
