@@ -958,7 +958,7 @@ fn main() {
         }
         let (asset_peak, asset_final, asset_count, asset_total, asset_checksum) =
             asset_record.unwrap();
-        println!("\nasset-workload");
+        println!();
         println!(
             "{}",
             format_asset_record(

@@ -39,6 +39,41 @@ const NUMERIC_VARIANT_FIELDS = new Set(
     (field) => field !== "variant" && field !== "drawlist_checksum",
   ),
 );
+const ASSET_FIELDS = [
+  "peak_requested_bytes",
+  "final_requested_bytes",
+  "allocation_count",
+  "total_allocated_bytes",
+  "resource_checksum",
+] as const;
+type AssetRecord = Record<(typeof ASSET_FIELDS)[number], string>;
+
+function parseAssetRecord(output: string): AssetRecord {
+  const normalized = output.endsWith("\n") ? output.slice(0, -1) : output;
+  const fields = normalized.split(" ");
+  expect(fields).toHaveLength(ASSET_FIELDS.length + 1);
+  expect(fields[0]).toBe("asset-workload");
+
+  const entries = fields.slice(1).map((field, index) => {
+    const separator = field.indexOf("=");
+    expect(separator).toBeGreaterThan(0);
+    expect(field.indexOf("=", separator + 1)).toBe(-1);
+    expect(field.slice(0, separator)).toBe(ASSET_FIELDS[index]);
+    const value = field.slice(separator + 1);
+    expect(value).not.toBe("");
+    return [ASSET_FIELDS[index], value];
+  });
+  const record = Object.fromEntries(entries) as AssetRecord;
+
+  for (const field of ASSET_FIELDS.slice(0, -1)) {
+    expect(record[field]).toMatch(/^\d+$/);
+    const value = Number(record[field]);
+    expect(Number.isSafeInteger(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+  }
+  expect(record.resource_checksum).toMatch(/^[0-9a-f]{16}$/);
+  return record;
+}
 
 function parseVariantRecord(output: string): VariantRecord {
   const lines = output.split("\n");
@@ -70,7 +105,7 @@ function parseVariantRecord(output: string): VariantRecord {
     expect(record[field]).toMatch(/^\d+$/);
     const value = Number(record[field]);
     expect(Number.isFinite(value)).toBe(true);
-    expect(Number.isInteger(value)).toBe(true);
+    expect(Number.isSafeInteger(value)).toBe(true);
     if (field === "measured_ticks") {
       expect(value).toBeGreaterThan(0);
     } else {
@@ -87,13 +122,17 @@ function parseVariantRecord(output: string): VariantRecord {
   return record as VariantRecord;
 }
 
-function parseVariantMatrix(output: string): Map<Variant, VariantRecord> {
-  const assetMarker = "\n\nasset-workload\n";
-  const matrixOutput = output.split(assetMarker, 1)[0]!;
-  const normalized = matrixOutput.endsWith("\n")
-    ? matrixOutput.slice(0, -1)
-    : matrixOutput;
-  const records = normalized.split("\n\n").map(parseVariantRecord);
+function parseVariantMatrix(output: string, requireAsset = false): Map<Variant, VariantRecord> {
+  const normalized = output.endsWith("\n") ? output.slice(0, -1) : output;
+  const blocks = normalized.split("\n\n");
+  let asset: AssetRecord | undefined;
+  if (blocks.at(-1)?.startsWith("asset-workload ")) {
+    asset = parseAssetRecord(blocks.pop()!);
+  }
+  if (requireAsset) {
+    expect(asset).toBeDefined();
+  }
+  const records = blocks.map(parseVariantRecord);
   const parsed = new Map<Variant, VariantRecord>();
   for (const record of records) {
     expect(parsed.has(record.variant as Variant)).toBe(false);
@@ -171,6 +210,8 @@ const VALID_VARIANT_RECORDS = [
 ] as const;
 
 const VALID_VARIANT_MATRIX = VALID_VARIANT_RECORDS.join("\n\n");
+const VALID_ASSET_RECORD =
+  "asset-workload peak_requested_bytes=144324 final_requested_bytes=125608 allocation_count=32 total_allocated_bytes=145380 resource_checksum=f2f7a1ac65b9ff90";
 const ZERO_MEASURED_TICKS_RECORD = VALID_VARIANT_RECORDS[0]!.replace(
   "measured_ticks=100",
   "measured_ticks=0",
@@ -205,6 +246,11 @@ test("variant parser rejects unknown variants and malformed records", () => {
   expect(() =>
     parseVariantRecord(
       VALID_VARIANT_RECORDS[0]!.replace("nodes=120", "nodes=1.5"),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseVariantRecord(
+      VALID_VARIANT_RECORDS[0]!.replace("nodes=120", "nodes=9007199254740992"),
     ),
   ).toThrow();
   expect(() =>
@@ -247,6 +293,29 @@ test("variant parser rejects duplicate records and missing required variants", (
   ).toThrow();
   expect(() =>
     parseVariantMatrix(VALID_VARIANT_RECORDS.slice(0, 4).join("\n\n")),
+  ).toThrow();
+  expect(() =>
+    parseVariantMatrix(`${VALID_VARIANT_MATRIX}\n\nnot-a-variant=1`),
+  ).toThrow();
+});
+
+test("asset suffix requires the exact safe legacy record", () => {
+  expect(parseAssetRecord(VALID_ASSET_RECORD)).toMatchObject({
+    allocation_count: "32",
+    resource_checksum: "f2f7a1ac65b9ff90",
+  });
+  expect(() =>
+    parseAssetRecord(VALID_ASSET_RECORD.replace("allocation_count=32", "allocation_count=9007199254740992")),
+  ).toThrow();
+  expect(() =>
+    parseVariantMatrix(`${VALID_VARIANT_MATRIX}\n\n${VALID_ASSET_RECORD}`, true),
+  ).not.toThrow();
+  expect(() => parseVariantMatrix(VALID_VARIANT_MATRIX, true)).toThrow();
+  expect(() =>
+    parseVariantMatrix(
+      `${VALID_VARIANT_MATRIX}\n\n${VALID_ASSET_RECORD.replace("resource_checksum=f2f7a1ac65b9ff90", "resource_checksum=bad")}`,
+      true,
+    ),
   ).toThrow();
 });
 
@@ -326,11 +395,11 @@ test(
       .env({ ...process.env, POCKETJS_ASSET_WORKLOAD: "1" })
       .quiet()
       .text();
-    expect(parseVariantMatrix(output).size).toBe(VARIANTS.length);
-    const assetSection = output.split("\n\nasset-workload\n")[1];
-    expect(assetSection).toBeDefined();
-    expect(assetSection).toMatch(
-      /^asset-workload peak_requested_bytes=\d+ final_requested_bytes=\d+ allocation_count=\d+ total_allocated_bytes=\d+ resource_checksum=[0-9a-f]{16}\n?$/,
-    );
+    expect(parseVariantMatrix(output, true).size).toBe(VARIANTS.length);
+    const assetSection = output.split("\n\n").at(-1)!;
+    expect(parseAssetRecord(assetSection)).toMatchObject({
+      allocation_count: "32",
+      resource_checksum: "f2f7a1ac65b9ff90",
+    });
   },
 );
