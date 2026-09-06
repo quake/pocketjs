@@ -740,6 +740,15 @@ fn main() {
     assert_eq!(profile.layout_us + profile.animation_us, profile.tick_us);
     // Ui::tick includes animation bookkeeping, so this is a tick/layout proxy.
     let avg_layout_us = total_us / timings.len() as u128;
+    println!("stage_tick_us={}", profile.tick_us);
+    println!("stage_draw_us={}", profile.draw_us);
+    println!("stage_layout_us={}", profile.layout_us);
+    println!("stage_animation_us={}", profile.animation_us);
+    println!("stage_allocation_count={}", profile.allocation_count);
+    println!(
+        "stage_total_allocated_bytes={}",
+        profile.total_allocated_bytes
+    );
     println!("peak_requested_bytes={}", PEAK.load(Ordering::Relaxed));
     println!("final_requested_bytes={}", LIVE.load(Ordering::Relaxed));
     println!("allocation_count={allocation_count}");
@@ -751,15 +760,6 @@ fn main() {
     println!("text_mode=atlas");
     println!("texture_mode=atlas");
     println!("drawlist_checksum={checksum:016x}");
-    println!("stage_tick_us={}", profile.tick_us);
-    println!("stage_draw_us={}", profile.draw_us);
-    println!("stage_layout_us={}", profile.layout_us);
-    println!("stage_animation_us={}", profile.animation_us);
-    println!("stage_allocation_count={}", profile.allocation_count);
-    println!(
-        "stage_total_allocated_bytes={}",
-        profile.total_allocated_bytes
-    );
     assert_eq!(
         checksum, 0xcc6a0b00efdba151,
         "deterministic benchmark drawlist changed"
