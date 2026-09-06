@@ -11,6 +11,18 @@
   "candidate_patch_artifact": null,
   "candidate_provenance_reason": "The candidate was reverted because neither timing metric met the 3% gate; its uncommitted production patch has no independently reproducible revision or artifact.",
   "candidate_files": ["engine/core/src/layout.rs"],
+  "tdd": {
+    "focused_command": "cargo test --manifest-path engine/core/Cargo.toml readback_scratch_preserves_primary_and_auxiliary_rounded_layouts",
+    "red": {
+      "result": "FAIL",
+      "reason": "missing readback scratch field/helper"
+    },
+    "green": {
+      "result": "PASS",
+      "tests": 1,
+      "before_benchmark_discard": true
+    }
+  },
   "candidate_test_commands": [
     "cargo test --manifest-path engine/core/Cargo.toml readback_scratch_preserves_primary_and_auxiliary_rounded_layouts",
     "cargo test --manifest-path engine/core/Cargo.toml",
@@ -57,7 +69,9 @@
   "memory_scan": {
     "uncapped_arena_bump_bytes": 2649904,
     "min_pass_arena_bytes": 2883584,
+    "safety_margin_bytes": 576717,
     "safe_arena_bytes": 3670016,
+    "attempt_count": 3,
     "attempts": [
       { "arena_bytes": 2883584, "pass": true, "avg_work_us": 4679, "arena_bump_bytes": 2649904 },
       { "arena_bytes": 2621440, "pass": false, "error": "below uncapped high-water 2.53 MiB" },
