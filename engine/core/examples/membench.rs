@@ -544,16 +544,18 @@ fn draw_and_hash(ui: &mut Ui, checksum: &mut u64) {
 fn tick_and_measure(
     ui: &mut Ui,
     checksum: &mut u64,
-    total_ns: &mut u128,
-    max_ns: &mut u128,
+    total_us: &mut u128,
+    max_us: &mut u128,
     profile: &mut StageProfile,
     phase: WorkloadPhase,
 ) {
     let tick_started = Instant::now();
     ui.tick();
-    let tick_ns = tick_started.elapsed().as_nanos();
-    *total_ns += tick_ns;
-    *max_ns = (*max_ns).max(tick_ns);
+    let tick_elapsed = tick_started.elapsed();
+    let tick_us = tick_elapsed.as_micros();
+    let tick_ns = tick_elapsed.as_nanos();
+    *total_us += tick_us;
+    *max_us = (*max_us).max(tick_us);
     profile.tick_ns += tick_ns;
     // These are workload-phase proxies, not internal function timings.
     match phase {
@@ -614,8 +616,8 @@ fn main() {
 
     begin_measurement();
     let mut checksum = 0xcbf29ce484222325;
-    let mut total_ns = 0u128;
-    let mut max_ns = 0u128;
+    let mut total_us = 0u128;
+    let mut max_us = 0u128;
     let mut profile = StageProfile::default();
 
     // Phase 1: initial tree and resources.
@@ -651,8 +653,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_ns,
-            &mut max_ns,
+            &mut total_us,
+            &mut max_us,
             &mut profile,
             WorkloadPhase::Animation,
         );
@@ -676,8 +678,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_ns,
-            &mut max_ns,
+            &mut total_us,
+            &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -701,8 +703,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_ns,
-            &mut max_ns,
+            &mut total_us,
+            &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -721,8 +723,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_ns,
-            &mut max_ns,
+            &mut total_us,
+            &mut max_us,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -749,8 +751,11 @@ fn main() {
     let stage_layout_us = stage_tick_us - stage_animation_us;
     assert_eq!(stage_layout_us + stage_animation_us, stage_tick_us);
     let stage_draw_us = profile.draw_ns / 1_000;
-    let avg_layout_us = (total_ns / timings.len() as u128) / 1_000;
-    let max_layout_us = max_ns / 1_000;
+    // avg_layout_us and max_layout_us are complete ui.tick() workload timing
+    // proxies, not layout-only timings; preserve their per-tick microsecond
+    // semantics. The stage fields above are workload-phase proxies instead.
+    let avg_layout_us = total_us / timings.len() as u128;
+    let max_layout_us = max_us;
     println!("stage_tick_us={stage_tick_us}");
     println!("stage_draw_us={stage_draw_us}");
     println!("stage_layout_us={stage_layout_us}");
