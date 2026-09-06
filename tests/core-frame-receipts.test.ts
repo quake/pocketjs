@@ -54,8 +54,8 @@ test("layout scratch baseline records canonical provenance and measurements", as
 
   expect(value.status).toBe("BASELINE");
   expect(value.plan).toBe("docs/superpowers/plans/2026-09-06-layout-scratch-optimizations.md");
-  expect(value.git_revision).toMatch(/^[0-9a-f]{40}$/);
-  expect(value.ppsspp_revision).toMatch(/^[0-9a-f]{40}$/);
+  expect(value.git_revision).toBe("a03eda0f22a73e2b09491e9e3efb64b6009aa251");
+  expect(value.ppsspp_revision).toBe("f929a74780b34bf8c1dfa9cf549bd9eb811e41aa");
   expect(value.toolchain.bun).toBe("1.3.13");
   expect(value.reproducibility.rust).toEqual({
     core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
@@ -75,9 +75,42 @@ test("layout scratch baseline records canonical provenance and measurements", as
   expect(value.stats.metric_arrays.avg_render_us).toEqual([581, 581, 581]);
   expect(value.stats.metric_arrays.arena_bump_bytes).toEqual([2649904, 2649904, 2649904]);
   expect(value.stats.sample_records).toEqual([
-    expect.objectContaining({ sample: 1, frames: 100, window_start: 28, window_n: 100 }),
-    expect.objectContaining({ sample: 2, frames: 100, window_start: 28, window_n: 100 }),
-    expect.objectContaining({ sample: 3, frames: 100, window_start: 28, window_n: 100 }),
+    expect.objectContaining({
+      sample: 1,
+      sim_hz: 60,
+      frames: 100,
+      window_start: 28,
+      window_n: 100,
+      avg_work_us: 4682,
+      max_work_us: 62672,
+      avg_render_us: 581,
+      arena_bump_bytes: 2649904,
+      drawlist_checksum: "c88e7bcedc5d42a5",
+    }),
+    expect.objectContaining({
+      sample: 2,
+      sim_hz: 60,
+      frames: 100,
+      window_start: 28,
+      window_n: 100,
+      avg_work_us: 4682,
+      max_work_us: 62672,
+      avg_render_us: 581,
+      arena_bump_bytes: 2649904,
+      drawlist_checksum: "c88e7bcedc5d42a5",
+    }),
+    expect.objectContaining({
+      sample: 3,
+      sim_hz: 60,
+      frames: 100,
+      window_start: 28,
+      window_n: 100,
+      avg_work_us: 4682,
+      max_work_us: 62672,
+      avg_render_us: 581,
+      arena_bump_bytes: 2649904,
+      drawlist_checksum: "c88e7bcedc5d42a5",
+    }),
   ]);
   expect(value.stats.checksum).toBe("c88e7bcedc5d42a5");
   expect(value.stats.checksum_samples).toEqual([
@@ -85,7 +118,34 @@ test("layout scratch baseline records canonical provenance and measurements", as
     "c88e7bcedc5d42a5",
     "c88e7bcedc5d42a5",
   ]);
-  expect(value.stats.memory_scan.attempt_count).toBe(3);
-  expect(value.stats.memory_scan.attempts).toHaveLength(3);
+  expect(value.stats.sample_records.every((sample: Record<string, unknown>) => sample.drawlist_checksum === value.stats.checksum)).toBe(true);
+  expect(value.stats.metric_arrays.drawlist_checksum).toEqual(value.stats.checksum_samples);
+  expect(value.stats.safe_arena_bytes).toBe(3670016);
+  expect(value.stats.memory_scan).toMatchObject({
+    uncapped_arena_bump_bytes: 2649904,
+    min_pass_arena_bytes: 2883584,
+    safety_margin_bytes: 576717,
+    safe_arena_bytes: 3670016,
+    attempt_count: 3,
+  });
+  expect(value.stats.memory_scan.attempts).toEqual([
+    {
+      arena_bytes: 2883584,
+      pass: true,
+      avg_work_us: 4682,
+      arena_bump_bytes: 2649904,
+    },
+    {
+      arena_bytes: 2621440,
+      pass: false,
+      error: "below uncapped high-water 2.53 MiB",
+    },
+    {
+      arena_bytes: 3670016,
+      pass: true,
+      avg_work_us: 4682,
+      arena_bump_bytes: 2649904,
+    },
+  ]);
   expect(value.stats.report_path).toMatch(/^dist\/bench\/ppsspp-bench-.*\.json$/);
 });
