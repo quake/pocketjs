@@ -22,7 +22,7 @@
 - Modify: `tests/core-memory-bench.test.ts`
 - Test input: existing `engine/core/examples/membench.rs` output
 
-- [ ] **Step 1: Add failing assertions for stage fields.**
+- [x] **Step 1: Add failing assertions for stage fields.**
 
 Extend `REQUIRED_FIELDS` with these exact fields:
 
@@ -39,7 +39,7 @@ The parser must continue rejecting unknown, duplicate, empty, non-integer, and
 negative values. Add assertions that all stage values are non-negative integers
 and that the stage timing fields are present in the parsed receipt.
 
-- [ ] **Step 2: Run the receipt test and verify it fails.**
+- [x] **Step 2: Run the receipt test and verify it fails.**
 
 ```bash
 bun test tests/core-memory-bench.test.ts
@@ -53,7 +53,7 @@ new stage fields.
 **Files:**
 - Modify: `engine/core/examples/membench.rs:224-235, 505-536, 578-680`
 
-- [ ] **Step 1: Add a stage accumulator with explicit invariants.**
+- [x] **Step 1: Add a stage accumulator with explicit invariants.**
 
 Add a small benchmark-local structure:
 
@@ -71,7 +71,7 @@ struct StageProfile {
 
 Keep it local to the example. Do not export it from the core library.
 
-- [ ] **Step 2: Instrument the existing tick/draw boundary.**
+- [x] **Step 2: Instrument the existing tick/draw boundary.**
 
 Change `tick_and_measure` to accept `&mut StageProfile`. Measure the existing
 `ui.tick()` duration as `tick_us`, measure `ui.draw()` separately as `draw_us`,
@@ -90,7 +90,7 @@ let words = &ui.draw().words;
 profile.draw_us += started.elapsed().as_micros();
 ```
 
-- [ ] **Step 3: Attribute layout and animation sub-stages without changing core behavior.**
+- [x] **Step 3: Attribute layout and animation sub-stages without changing core behavior.**
 
 Keep `ui.tick()` as the only production operation. Use the existing workload
 phase boundaries to accumulate stage labels: structural/text/burst ticks are
@@ -105,14 +105,14 @@ stage_layout_us + stage_animation_us <= stage_tick_us
 for the measured ticks. Each phase total is independently floored to microseconds,
 so the residual must be less than 2us.
 
-- [ ] **Step 4: Snapshot allocation counters after the measured workload.**
+- [x] **Step 4: Snapshot allocation counters after the measured workload.**
 
 After `end_measurement()`, copy `COUNT` and `TOTAL` into the profile output
 fields. Keep existing `allocation_count` and `total_allocated_bytes` output
 unchanged; the stage fields must equal those values because all measured
 allocations belong to the profiled workload.
 
-- [ ] **Step 5: Print the new receipt fields.**
+- [x] **Step 5: Print the new receipt fields.**
 
 Print these exact lines before the existing receipt fields:
 
@@ -156,10 +156,16 @@ is the existing `unused_mut` warning.
 - [x] **Step 3: Confirm production scope.**
 
 ```bash
-git diff --name-only b68923b..HEAD -- engine/core/src hosts/psp
+git diff --name-only a185ba9..HEAD
 ```
 
-Expected: no files. Only the example and its test may change.
+Expected: exactly these allowed files:
+
+- `docs/superpowers/plans/2026-09-06-core-profiling-instrumentation.md`
+- `engine/core/examples/membench.rs`
+- `tests/core-memory-bench.test.ts`
+
+This confirms no changes under `engine/core/src` or `hosts/psp`.
 
 - [x] **Step 4: Commit the profiling instrumentation.**
 
@@ -170,6 +176,14 @@ git commit -m "test(core): add stage profiling to membench"
 
 The commit must not include optimization code or a PSP benchmark receipt. The
 stage output is diagnostic evidence for the next optimization design.
+
+## Validation Results
+
+- [x] Stage receipt: `bun test tests/core-memory-bench.test.ts` passed (5 tests, 0 failures).
+- [x] Core tests: `cargo test --manifest-path engine/core/Cargo.toml` passed (129 tests, 0 failures; 0 doc-tests).
+- [x] Requested Bun suite: `bun test tests/core-frame-receipts.test.ts tests/core-memory-bench.test.ts tests/psp-bench-parser.test.ts tests/psp-bench.test.ts` passed (31 tests, 0 failures).
+- [x] `git diff --check` passed.
+- [x] Full-range scope check: `git diff --name-only a185ba9..HEAD` returned exactly the three allowed files listed in Task 3 Step 3. It confirmed no changes under `engine/core/src` or `hosts/psp`.
 
 ## Task 4: Final Review
 
@@ -187,13 +201,6 @@ cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet
 
 Record the six stage fields and use them to rank the next optimization
 candidates. Do not retain a code optimization in this task.
-## Task 3 Results
-
-- [x] Stage receipt: `bun test tests/core-memory-bench.test.ts` passed (5 tests, 0 failures).
-- [x] Core tests: `cargo test --manifest-path engine/core/Cargo.toml` passed (129 tests, 0 failures; 0 doc-tests).
-- [x] Requested Bun suite: `bun test tests/core-frame-receipts.test.ts tests/core-memory-bench.test.ts tests/psp-bench-parser.test.ts tests/psp-bench.test.ts` passed (31 tests, 0 failures).
-- [x] `git diff --check` passed.
-- [x] `git diff --name-only b68923b..HEAD -- engine/core/src hosts/psp` returned no production core/host changes across the profiling implementation and documentation commits.
 - [x] Final receipt: `cargo run --manifest-path engine/core/Cargo.toml --example membench --quiet` completed with stable allocation totals.
 
 Measured final receipt:
@@ -217,6 +224,8 @@ text_mode=atlas
 texture_mode=atlas
 drawlist_checksum=cc6a0b00efdba151
 ```
+
+These are aggregate workload-phase totals over 36 layout-phase ticks, 24 animation-phase ticks, and 60 draw calls, not internal function timings. Normalized workload-phase averages from this receipt are approximately layout `1198us/layout tick` (`43114 / 36`), animation `<1us/animation tick` (`5 / 24`), and draw `274us/draw` (`16432 / 60`).
 
 Conservation: `43114 + 5 = 43119`, leaving a `1us` residual below `stage_tick_us=43120`; independently floored phase microseconds may sum to at most the tick total, with residual `<2us`.
 
