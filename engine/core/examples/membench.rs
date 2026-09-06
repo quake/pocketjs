@@ -733,6 +733,7 @@ fn main() {
 
     let nodes = 1 + 1 + 1 + 32 * 3;
     end_measurement();
+    // Snapshot the measured workload receipt before reading the legacy fields.
     let (stage_allocation_count, stage_total_allocated_bytes) = (
         COUNT.load(Ordering::Relaxed),
         TOTAL.load(Ordering::Relaxed),
@@ -747,9 +748,11 @@ fn main() {
     // the aggregate nanosecond totals once so short animation ticks contribute.
     assert_eq!(profile.layout_ns + profile.animation_ns, profile.tick_ns);
     let stage_tick_us = profile.tick_ns / 1_000;
+    let stage_layout_us = profile.layout_ns / 1_000;
     let stage_animation_us = profile.animation_ns / 1_000;
-    let stage_layout_us = stage_tick_us - stage_animation_us;
-    assert_eq!(stage_layout_us + stage_animation_us, stage_tick_us);
+    let phase_us = stage_layout_us + stage_animation_us;
+    assert!(phase_us <= stage_tick_us);
+    assert!(stage_tick_us - phase_us < 2);
     let stage_draw_us = profile.draw_ns / 1_000;
     // avg_layout_us and max_layout_us are complete ui.tick() workload timing
     // proxies, not layout-only timings; preserve their per-tick microsecond

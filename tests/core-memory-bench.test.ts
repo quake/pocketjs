@@ -195,9 +195,12 @@ function deterministicStageReceipt(receipt: Receipt): Record<string, string> {
 }
 
 function expectStageMetrics(receipt: Receipt): void {
-  expect(Number(receipt.stage_layout_us) + Number(receipt.stage_animation_us)).toBe(
-    Number(receipt.stage_tick_us),
-  );
+  const tick = Number(receipt.stage_tick_us);
+  const phase = Number(receipt.stage_layout_us) + Number(receipt.stage_animation_us);
+  expect(Number(receipt.stage_layout_us)).toBeLessThanOrEqual(tick);
+  expect(Number(receipt.stage_animation_us)).toBeLessThanOrEqual(tick);
+  expect(phase).toBeLessThanOrEqual(tick);
+  expect(tick - phase).toBeLessThan(2);
   expect(receipt.stage_allocation_count).toBe(receipt.allocation_count);
   expect(receipt.stage_total_allocated_bytes).toBe(receipt.total_allocated_bytes);
 }
