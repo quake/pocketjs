@@ -494,6 +494,19 @@ fn format_asset_record(
     )
 }
 
+fn print_variant_record(receipt: &VariantReceipt) {
+    println!("variant={}", receipt.variant);
+    println!("nodes={}", receipt.nodes);
+    println!("measured_ticks={}", receipt.measured_ticks);
+    println!("structural_relayouts={}", receipt.structural_relayouts);
+    println!("avg_tick_us={}", receipt.profile.avg_tick_us);
+    println!("max_tick_us={}", receipt.profile.max_tick_us);
+    println!("draw_us={}", receipt.draw_us);
+    println!("allocation_count={}", receipt.profile.allocation_count);
+    println!("total_allocated_bytes={}", receipt.profile.total_allocated_bytes);
+    println!("drawlist_checksum={}", receipt.checksum);
+}
+
 fn timing_capacity() -> usize {
     24 + 8 + 16 + 12
 }
@@ -556,12 +569,19 @@ fn hash_draw(words: &[u32], checksum: &mut u64) {
     }
 }
 
-fn warmup_draw(ui: &mut Ui, checksum: &mut u64, hash_enabled: bool) {
+fn warmup_draw(
+    ui: &mut Ui,
+    checksum: &mut u64,
+    hash_enabled: bool,
+    require_glyphs: bool,
+) {
     let words = &ui.draw().words;
-    assert!(
-        words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
-        "benchmark draw must emit atlas-backed glyphs"
-    );
+    if require_glyphs {
+        assert!(
+            words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
+            "benchmark draw must emit atlas-backed glyphs"
+        );
+    }
     if hash_enabled {
         hash_draw(words, checksum);
     }
@@ -575,6 +595,7 @@ fn tick_and_measure(
     profile: &mut StageProfile,
     phase: WorkloadPhase,
     draw_enabled: bool,
+    require_glyphs: bool,
 ) {
     let tick_started = Instant::now();
     ui.tick();
@@ -594,10 +615,12 @@ fn tick_and_measure(
         let draw_started = Instant::now();
         let words = &ui.draw().words;
         let draw_ns = draw_started.elapsed().as_nanos();
-        assert!(
-            words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
-            "benchmark draw must emit atlas-backed glyphs"
-        );
+        if require_glyphs {
+            assert!(
+                words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
+                "benchmark draw must emit atlas-backed glyphs"
+            );
+        }
         hash_draw(words, checksum);
         profile.draw_ns += draw_ns;
     }
@@ -651,24 +674,62 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     let mut max_us = 0u128;
     let mut profile = StageProfile::default();
 
+    let (
+        variant_name,
+        draw_enabled,
+        text_fixture,
+        run_steady,
+        run_churn,
+        run_text,
+        run_text_probes,
+        run_burst,
+    ) =
+        match variant {
+            Variant::Full => ("full", true, true, true, true, true, true, true),
+            Variant::StyleOnly => ("style_only", true, true, true, false, false, false, false),
+            Variant::StructureNoText => (
+                "structure_no_text",
+                true,
+                false,
+                false,
+                true,
+                false,
+                false,
+                false,
+            ),
+            Variant::TextUpdates => ("text_updates", true, true, false, false, true, false, false),
+            Variant::NoDrawControl => ("no_draw_control", false, true, true, true, true, true, true),
+        };
+
     // Phase 1: initial tree and resources.
     let panel = ui.create_node(spec::NodeType::View as u8);
     ui.set_style(panel, 0);
     ui.insert_before(spec::ROOT_ID, panel, 0);
-    let title = ui.create_node(spec::NodeType::Text as u8);
+    let title_type = if text_fixture {
+        spec::NodeType::Text
+    } else {
+        spec::NodeType::View
+    };
+    let title = ui.create_node(title_type as u8);
     ui.set_style(title, 1);
-    ui.set_text(title, &source_strings[0]);
+    if text_fixture {
+        ui.set_text(title, &source_strings[0]);
+    }
     ui.insert_before(panel, title, 0);
     for i in 0..32 {
         let row = ui.create_node(spec::NodeType::View as u8);
         ui.set_style(row, 0);
         ui.set_prop(row, spec::prop::HEIGHT, 24.0 + (i % 3) as f64);
         ui.insert_before(panel, row, 0);
-        let text = ui.create_node(spec::NodeType::Text as u8);
+        let text = ui.create_node(title_type as u8);
         ui.set_style(text, 1);
-        ui.set_text(text, &source_strings[1]);
+        if text_fixture {
+            ui.set_text(text, &source_strings[1]);
+        }
         ui.insert_before(row, text, 0);
-        text_ids.push(text);
+        if text_fixture {
+            text_ids.push(text);
+        }
         let image = ui.create_node(spec::NodeType::Image as u8);
         ui.set_style(image, 2);
         ui.set_prop(image, spec::prop::WIDTH, 16.0);
@@ -676,103 +737,107 @@ fn run_variant(variant: Variant) -> VariantReceipt {
         ui.set_image(image, texture);
         ui.insert_before(row, image, 0);
     }
-    let (variant_name, draw_enabled) = match variant {
-        Variant::Full => ("full", true),
-        Variant::NoDrawControl => ("no_draw_control", false),
-        Variant::StyleOnly | Variant::StructureNoText | Variant::TextUpdates => {
-            panic!("workload variant is not implemented")
-        }
-    };
-    // Both variants share the existing measurement boundary; normalize layout
-    // and draw caches before measured ticks, then only control skips draw/hash.
-    warmup_draw(&mut ui, &mut checksum, draw_enabled);
+    // All variants share the measurement boundary; only the control skips draw/hash.
+    warmup_draw(&mut ui, &mut checksum, draw_enabled, text_fixture);
 
     // Phase 2: steady style-only ticks.
-    for i in 0..STEADY_TICKS {
-        ui.set_prop(panel, spec::prop::OPACITY, 0.85 + (i % 4) as f64 * 0.03);
-        tick_and_measure(
-            &mut ui,
-            &mut checksum,
-            &mut total_us,
-            &mut max_us,
-            &mut profile,
-            WorkloadPhase::Animation,
-            draw_enabled,
-        );
-        timings.push(i);
+    if run_steady {
+        for i in 0..STEADY_TICKS {
+            ui.set_prop(panel, spec::prop::OPACITY, 0.85 + (i % 4) as f64 * 0.03);
+            tick_and_measure(
+                &mut ui,
+                &mut checksum,
+                &mut total_us,
+                &mut max_us,
+                &mut profile,
+                WorkloadPhase::Animation,
+                draw_enabled,
+                text_fixture,
+            );
+            timings.push(i);
+        }
     }
 
     // Phase 3: fixed-size subtree creation and destruction.
     let mut structural_relayouts = 1u64;
-    for round in 0..CHURN_ROUNDS {
-        churn_ids.clear();
-        for i in 0..CHURN_SIZE {
-            let node = ui.create_node(spec::NodeType::View as u8);
-            ui.set_style(node, 0);
-            ui.set_prop(node, spec::prop::HEIGHT, (20 + i + round) as f64);
-            ui.insert_before(panel, node, 0);
-            churn_ids.push(node);
+    if run_churn {
+        for round in 0..CHURN_ROUNDS {
+            churn_ids.clear();
+            for i in 0..CHURN_SIZE {
+                let node = ui.create_node(spec::NodeType::View as u8);
+                ui.set_style(node, 0);
+                ui.set_prop(node, spec::prop::HEIGHT, (20 + i + round) as f64);
+                ui.insert_before(panel, node, 0);
+                churn_ids.push(node);
+            }
+            for node in churn_ids.iter().copied() {
+                ui.destroy_node(node);
+            }
+            tick_and_measure(
+                &mut ui,
+                &mut checksum,
+                &mut total_us,
+                &mut max_us,
+                &mut profile,
+                WorkloadPhase::Layout,
+                draw_enabled,
+                text_fixture,
+            );
+            structural_relayouts += 1;
+            timings.push(STEADY_TICKS + round);
         }
-        for node in churn_ids.iter().copied() {
-            ui.destroy_node(node);
-        }
-        tick_and_measure(
-            &mut ui,
-            &mut checksum,
-            &mut total_us,
-            &mut max_us,
-            &mut profile,
-            WorkloadPhase::Layout,
-            draw_enabled,
-        );
-        structural_relayouts += 1;
-        timings.push(STEADY_TICKS + round);
     }
 
     // Phase 4: text changes with a structural relayout at a fixed interval.
-    for i in 0..TEXT_TICKS {
-        let text = text_ids[i % text_ids.len()];
-        let value = if i % 4 == 0 {
-            "structural text update"
-        } else {
-            "steady text update"
-        };
-        ui.set_text(text, value);
-        if structural_tick(i) {
-            structural_probe(&mut ui, panel, 22.0 + i as f64);
-            structural_relayouts += 1;
+    if run_text {
+        for i in 0..TEXT_TICKS {
+            let text = text_ids[i % text_ids.len()];
+            let value = if i % 4 == 0 {
+                "structural text update"
+            } else {
+                "steady text update"
+            };
+            ui.set_text(text, value);
+            if run_text_probes && structural_tick(i) {
+                structural_probe(&mut ui, panel, 22.0 + i as f64);
+                structural_relayouts += 1;
+            }
+            tick_and_measure(
+                &mut ui,
+                &mut checksum,
+                &mut total_us,
+                &mut max_us,
+                &mut profile,
+                WorkloadPhase::Layout,
+                draw_enabled,
+                text_fixture,
+            );
+            timings.push(STEADY_TICKS + CHURN_ROUNDS + i);
         }
-        tick_and_measure(
-            &mut ui,
-            &mut checksum,
-            &mut total_us,
-            &mut max_us,
-            &mut profile,
-            WorkloadPhase::Layout,
-            draw_enabled,
-        );
-        timings.push(STEADY_TICKS + CHURN_ROUNDS + i);
     }
 
     // Phase 5: one fixed burst over the peak path.
-    for i in 0..BURST_TICKS {
-        let text = text_ids[(i * 7) % text_ids.len()];
-        ui.set_text(text, if i & 1 == 0 { "burst A" } else { "burst B" });
-        ui.set_prop(panel, spec::prop::GAP, (i % 5) as f64);
-        if structural_tick(i) {
-            structural_probe(&mut ui, panel, 30.0 + i as f64);
-            structural_relayouts += 1;
+    if run_burst {
+        for i in 0..BURST_TICKS {
+            let text = text_ids[(i * 7) % text_ids.len()];
+            ui.set_text(text, if i & 1 == 0 { "burst A" } else { "burst B" });
+            ui.set_prop(panel, spec::prop::GAP, (i % 5) as f64);
+            if structural_tick(i) {
+                structural_probe(&mut ui, panel, 30.0 + i as f64);
+                structural_relayouts += 1;
+            }
+            tick_and_measure(
+                &mut ui,
+                &mut checksum,
+                &mut total_us,
+                &mut max_us,
+                &mut profile,
+                WorkloadPhase::Layout,
+                draw_enabled,
+                text_fixture,
+            );
+            timings.push(STEADY_TICKS + CHURN_ROUNDS + TEXT_TICKS + i);
         }
-        tick_and_measure(
-            &mut ui,
-            &mut checksum,
-            &mut total_us,
-            &mut max_us,
-            &mut profile,
-            WorkloadPhase::Layout,
-            draw_enabled,
-        );
-        timings.push(STEADY_TICKS + CHURN_ROUNDS + TEXT_TICKS + i);
     }
 
     let nodes = 1 + 1 + 1 + 32 * 3;
@@ -819,39 +884,41 @@ fn run_variant(variant: Variant) -> VariantReceipt {
         },
         profile,
     };
-    if draw_enabled {
+    if receipt.variant == "full" {
         assert_eq!(
             receipt.checksum, "cc6a0b00efdba151",
             "deterministic benchmark drawlist changed"
         );
+    } else if receipt.variant == "structure_no_text" {
+        assert_eq!(receipt.checksum, "8d474a196e655646");
+    } else if receipt.variant == "no_draw_control" {
+        assert_eq!(receipt.draw_us, 0);
     }
+    assert!(receipt.measured_ticks > 0);
+    assert!(
+        receipt.checksum == "control"
+            || (receipt.checksum.len() == 16
+                && receipt.checksum.chars().all(|character| character.is_ascii_hexdigit()))
+    );
     receipt
 }
 
 fn main() {
-    let full = run_variant(Variant::Full);
-    assert_eq!(full.variant, "full");
-    assert_eq!(full.measured_ticks, 60);
-    println!("stage_tick_us={}", full.profile.tick_ns / 1_000);
-    println!("stage_draw_us={}", full.draw_us);
-    println!("stage_layout_us={}", full.profile.layout_ns / 1_000);
-    println!("stage_animation_us={}", full.profile.animation_ns / 1_000);
-    println!("stage_allocation_count={}", full.profile.allocation_count);
-    println!(
-        "stage_total_allocated_bytes={}",
-        full.profile.total_allocated_bytes
-    );
-    println!("peak_requested_bytes={}", full.profile.peak_requested_bytes);
-    println!("final_requested_bytes={}", full.profile.final_requested_bytes);
-    println!("allocation_count={}", full.profile.allocation_count);
-    println!("total_allocated_bytes={}", full.profile.total_allocated_bytes);
-    println!("avg_layout_us={}", full.profile.avg_tick_us);
-    println!("max_layout_us={}", full.profile.max_tick_us);
-    println!("nodes={}", full.nodes);
-    println!("structural_relayouts={}", full.structural_relayouts);
-    println!("text_mode=atlas");
-    println!("texture_mode=atlas");
-    println!("drawlist_checksum={}", full.checksum);
+    for (index, variant) in [
+        Variant::Full,
+        Variant::StyleOnly,
+        Variant::StructureNoText,
+        Variant::TextUpdates,
+        Variant::NoDrawControl,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index != 0 {
+            println!();
+        }
+        print_variant_record(&run_variant(variant));
+    }
 
     // Reproduce the opt-in asset receipt with POCKETJS_ASSET_WORKLOAD=1.
     if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
