@@ -60,7 +60,8 @@ const STAGE_FIELDS = [
   "stage_allocation_count",
   "stage_total_allocated_bytes",
 ] as const;
-const STABLE_STAGE_FIELDS = [
+// Allocation counts are deterministic; timing fields are wall-clock measurements and are excluded.
+const DETERMINISTIC_STAGE_FIELDS = [
   "stage_allocation_count",
   "stage_total_allocated_bytes",
 ] as const;
@@ -168,14 +169,14 @@ test("receipt parser rejects non-finite and non-integer numbers", () => {
 
 test("receipt fixture explicitly covers every stage field", () => {
   expect(() => parseReceipt(VALID_RECEIPT)).not.toThrow();
-  expect(STAGE_FIELDS).toEqual([
-    "stage_tick_us",
-    "stage_draw_us",
-    "stage_layout_us",
-    "stage_animation_us",
-    "stage_allocation_count",
-    "stage_total_allocated_bytes",
-  ]);
+  const requiredFields = new Set(REQUIRED_FIELDS);
+  const fixtureFields = new Set(
+    VALID_RECEIPT.split("\n").map((line) => line.slice(0, line.indexOf("="))),
+  );
+  for (const field of STAGE_FIELDS) {
+    expect(requiredFields.has(field)).toBe(true);
+    expect(fixtureFields.has(field)).toBe(true);
+  }
 });
 
 function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
@@ -187,8 +188,8 @@ function legacyCanonicalReceipt(receipt: Receipt): Record<string, string> {
   );
 }
 
-function stableStageReceipt(receipt: Receipt): Record<string, string> {
-  return Object.fromEntries(STABLE_STAGE_FIELDS.map((field) => [field, receipt[field]]));
+function deterministicStageReceipt(receipt: Receipt): Record<string, string> {
+  return Object.fromEntries(DETERMINISTIC_STAGE_FIELDS.map((field) => [field, receipt[field]]));
 }
 
 test(
@@ -201,7 +202,7 @@ test(
     const second = parseReceipt(await run());
 
     expect(legacyCanonicalReceipt(first)).toEqual(legacyCanonicalReceipt(second));
-    expect(stableStageReceipt(first)).toEqual(stableStageReceipt(second));
+    expect(deterministicStageReceipt(first)).toEqual(deterministicStageReceipt(second));
 
     const baseline = (await Bun.file(
       new URL("../docs/bench/core-memory-2026-09-05.json", import.meta.url),
