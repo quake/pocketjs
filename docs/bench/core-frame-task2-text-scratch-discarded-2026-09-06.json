@@ -7,6 +7,9 @@
   "baseline_git_revision": "32f1d44787a8c3960ad6e7e32a966c45b8569214",
   "candidate_git_revision": null,
   "candidate_source": "temporary uncommitted patch",
+  "candidate_reproducibility": "not independently reproducible",
+  "candidate_patch_artifact": null,
+  "candidate_provenance_reason": "The temporary candidate patch was reverted without a committed diff, so it has no independently reproducible patch artifact or revision.",
   "candidate_files": [
     "engine/core/src/draw.rs",
     "engine/core/src/tests.rs"
@@ -27,7 +30,7 @@
     "avg_render_improvement_percent": 0.0,
     "checksum_unchanged": true,
     "arena_regression": false,
-    "reason": "Neither timing metric met the 3% improvement gate; candidate code and test were reverted."
+    "reason": "Neither timing metric met the 3% improvement gate; the temporary candidate patch was reverted without a committed diff, including its test."
   },
   "comparison": {
     "avg_work_us": { "baseline": [4682, 4682, 4682], "candidate": [4669, 4669, 4669] },
