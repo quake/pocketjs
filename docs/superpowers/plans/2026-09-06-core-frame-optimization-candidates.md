@@ -25,7 +25,7 @@
 - Read: `docs/bench/core-layout-scratch-baseline-2026-09-06.json`
 - Read: `docs/superpowers/specs/2026-09-06-core-frame-optimization-candidates-design.md`
 
-- [ ] **Step 1: Verify the committed baseline and clean scope.**
+- [x] **Step 1: Verify the committed baseline and clean scope.**
 
 Run:
 
@@ -39,7 +39,7 @@ Expected: clean worktree, no production files in the prior optimization range,
 and all receipt tests passing. Use the committed baseline receipt as the
 comparison source; do not overwrite it.
 
-- [ ] **Step 2: Commit no code for this task.**
+- [x] **Step 2: Commit no code for this task.**
 
 The existing baseline is sufficient. Record the baseline path and exact command
 in each candidate receipt rather than creating duplicate baseline data.
@@ -52,7 +52,7 @@ in each candidate receipt rather than creating duplicate baseline data.
 - Add: one canonical receipt under `docs/bench/` if the candidate is rejected or retained
 - Modify: `tests/core-frame-receipts.test.ts` for that receipt
 
-- [ ] **Step 1: Add the failing text output equivalence test.**
+- [x] **Step 1: Add the failing text output equivalence test.**
 
 Exercise the existing text fixture through repeated draws and assert that the
 drawlist words/checksum and text output remain identical. The test must target
@@ -64,7 +64,7 @@ setup or helper.
 cargo test --manifest-path engine/core/Cargo.toml text -- --nocapture
 ```
 
-- [ ] **Step 2: Implement the smallest private scratch ownership change.**
+- [x] **Step 2: Implement the smallest private scratch ownership change.**
 
 Add a private `run_scratch: String` field to `Walker`, initialize it in
 `build_root`, and collect each run into that buffer. The buffer may be reused
@@ -90,7 +90,7 @@ If native emission requires ownership that would force a full copy on every
 run, restore the pre-candidate implementation and record the candidate as
 rejected rather than retaining a more complex design.
 
-- [ ] **Step 3: Run focused and full correctness tests.**
+- [x] **Step 3: Run focused and full correctness tests.**
 
 ```bash
 cargo test --manifest-path engine/core/Cargo.toml text -- --nocapture
@@ -100,7 +100,7 @@ cargo test --manifest-path engine/core/Cargo.toml
 Expected: all text output, provider selection, clipping, and DrawList golden
 tests pass with unchanged checksums.
 
-- [ ] **Step 4: Run the exact benchmark comparison.**
+- [x] **Step 4: Run the exact benchmark comparison.**
 
 ```bash
 bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan
@@ -112,7 +112,7 @@ Compare all three candidate samples with
 arena/safe-arena and correctness do not regress. Otherwise revert all
 production changes.
 
-- [ ] **Step 5: Record and validate the decision.**
+- [x] **Step 5: Record and validate the decision.**
 
 The receipt must include full provenance, candidate files, test commands,
 per-sample metrics, max work, workload metadata, checksum arrays, memory scan,
@@ -125,7 +125,7 @@ bun test tests/core-frame-receipts.test.ts
 git diff --check
 ```
 
-- [ ] **Step 6: Commit the isolated result.**
+- [x] **Step 6: Commit the isolated result.**
 
 ```bash
 git add engine/core/src/draw.rs engine/core/src/tests.rs docs/bench tests/core-frame-receipts.test.ts
@@ -135,6 +135,9 @@ git commit -m "perf(core): evaluate draw text scratch"
 If production code was reverted, commit only the receipt and its tests with a
 `test(core): record discarded draw scratch` message instead.
 
+The candidate was discarded at 0.256% work-time improvement; production code
+was reverted and the canonical receipt was retained.
+
 ## Task 3: Evaluate 3D Collection Scratch
 
 **Files:**
@@ -143,7 +146,7 @@ If production code was reverted, commit only the receipt and its tests with a
 - Add: a rejection or candidate receipt under `docs/bench/`
 - Modify: `tests/core-frame-receipts.test.ts` for the receipt
 
-- [ ] **Step 1: Inspect ownership and benchmark availability.**
+- [x] **Step 1: Inspect ownership and benchmark availability.**
 
 Confirm whether `collect_3d` receives `items` and `tex_cells` from an owning
 draw state or allocates them per frame. Confirm the benchmark registry still
@@ -156,28 +159,28 @@ bun tools/bench-ppsspp.ts --apps=motions --samples=3 --memory-scan
 Expected: `unknown app motions`. Do not substitute another workload or claim a
 3D performance result.
 
-- [ ] **Step 2: Add a focused ordering/checksum regression test before code.**
+- [x] **Step 2: Add a focused ordering/checksum regression test before code.**
 
 Use an existing perspective fixture to compare DrawList words and texture-cell
 ordering across repeated draws. Run the focused test red if it specifically
 depends on the proposed scratch owner; otherwise record that no safe testable
 candidate exists and skip production code.
 
-- [ ] **Step 3: Implement only an owner-local capacity reuse if safe.**
+- [x] **Step 3: Implement only an owner-local capacity reuse if safe.**
 
 Reuse existing vectors only when their lifetime is bounded by one draw and no
 recursive call can invalidate a borrow. Preserve stable insertion order and
 all texture batching. Reject the candidate instead of introducing a pool,
 unsafe aliasing, DrawList changes, or a public field when ownership is unclear.
 
-- [ ] **Step 4: Measure or record an explicit unmeasured rejection.**
+- [x] **Step 4: Measure or record an explicit unmeasured rejection.**
 
 If a reproducible active 3D workload is unavailable, record status
 `UNMEASURED` or `DISCARDED` with the blocker and do not retain production code.
 If a safe candidate is measured on the stats workload, label that limitation
 explicitly and apply the same 3% gate without claiming 3D coverage.
 
-- [ ] **Step 5: Validate and commit the auditable result.**
+- [x] **Step 5: Validate and commit the auditable result.**
 
 ```bash
 cargo test --manifest-path engine/core/Cargo.toml
@@ -188,6 +191,9 @@ git diff --check
 Commit only the receipt/test changes or a qualifying core candidate using a
 Conventional Commit message.
 
+The required `motions` workload is absent from the benchmark registry, so the
+candidate was rejected without production code or a 3D performance claim.
+
 ## Task 4: Evaluate Layout Rebuild Scratch
 
 **Files:**
@@ -197,14 +203,14 @@ Conventional Commit message.
 - Add: a receipt under `docs/bench/` when measured or rejected
 - Modify: `tests/core-frame-receipts.test.ts` for the receipt
 
-- [ ] **Step 1: Identify remaining structure-dirty allocations.**
+- [x] **Step 1: Identify remaining structure-dirty allocations.**
 
 Trace `surface_slots`, recursive `kids`, and text-run collection through
 `build`. Reject any design that would borrow a reusable vector across recursive
 calls, move data needed by a Taffy `MeasureCtx`, or require unsafe/global
 storage.
 
-- [ ] **Step 2: Add a failing layout equivalence test for any safe candidate.**
+- [x] **Step 2: Add a failing layout equivalence test for any safe candidate.**
 
 Compare rounded layout output and text provider state before and after repeated
 structure relayout. Run the focused layout tests and verify the candidate
@@ -214,7 +220,7 @@ behavior is not already covered by existing code.
 cargo test --manifest-path engine/core/Cargo.toml layout -- --nocapture
 ```
 
-- [ ] **Step 3: Implement, test, and benchmark only the minimal safe change.**
+- [x] **Step 3: Implement, test, and benchmark only the minimal safe change.**
 
 Keep recursive ownership explicit and preserve primary/auxiliary root
 independence. Run:
@@ -227,11 +233,12 @@ bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan
 Apply the same 3% timing, checksum, arena, safe-arena, and correctness gates.
 Revert a non-qualifying production candidate.
 
-- [ ] **Step 4: Record receipt evidence and commit.**
+- [x] **Step 4: Record receipt evidence and commit.**
 
 Use the canonical schema, baseline-linked tests, full sample/memory evidence,
 and a truthful retained/discarded/rejected status. Commit only the isolated
-result.
+result. The candidate was discarded at 0.0214% work-time improvement with a
+32-byte arena high-water increase; production code was reverted.
 
 ## Task 5: Final Verification
 
@@ -239,7 +246,7 @@ result.
 - Modify: only retained candidate files and receipt/test files
 - Read: all new receipts and the implementation plan
 
-- [ ] **Step 1: Run final verification.**
+- [x] **Step 1: Run final verification.**
 
 ```bash
 cargo test --manifest-path engine/core/Cargo.toml
@@ -251,7 +258,7 @@ git status --short --branch
 Expected: 129 core tests, all requested Bun tests, clean diff check, and no
 uncommitted production changes.
 
-- [ ] **Step 2: Verify production scope and decisions.**
+- [x] **Step 2: Verify production scope and decisions.**
 
 ```bash
 git diff --name-only 47288db..HEAD -- hosts/psp engine/core
@@ -260,7 +267,7 @@ git diff --name-only 47288db..HEAD -- hosts/psp engine/core
 Confirm every receipt has a baseline-linked decision, derived timing/checksum
 and arena gates, complete provenance, and no unsupported 3D performance claim.
 
-- [ ] **Step 3: Request final review and publish when permitted.**
+- [x] **Step 3: Request final review and publish when permitted.**
 
 Request a final code review covering all candidate commits. Attempt to publish a
 draft pull request as required by repository instructions; if GitHub denies
