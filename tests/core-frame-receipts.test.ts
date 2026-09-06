@@ -13,15 +13,43 @@ const assertNoRetainedProductionCandidate = (value: Record<string, unknown>) => 
 };
 
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+const baselineReceiptName = "docs/bench/core-layout-scratch-baseline-2026-09-06.json";
 
 const assertBaselineComparison = (value: any, baseline: any) => {
-  expect(value.baseline_receipt).toBe("docs/bench/core-layout-scratch-baseline-2026-09-06.json");
+  expect(value.baseline_receipt).toBe(baselineReceiptName);
+  expect(value.baseline_git_revision).toBe(baseline.git_revision);
   expect(value.comparison.avg_work_us.baseline).toEqual(baseline.stats.metric_arrays.avg_work_us);
   expect(value.comparison.avg_render_us.baseline).toEqual(baseline.stats.metric_arrays.avg_render_us);
   expect(value.comparison.max_work_us.baseline).toEqual(baseline.stats.metric_arrays.max_work_us);
   expect(value.comparison.arena_bump_bytes.baseline).toEqual(baseline.stats.metric_arrays.arena_bump_bytes);
   expect(value.comparison.safe_arena_bytes.baseline).toBe(baseline.stats.safe_arena_bytes);
   expect(value.comparison.drawlist_checksum.baseline).toEqual(baseline.stats.checksum_samples);
+};
+
+const assertStatsEvidence = (stats: any, expected: any) => {
+  expect(stats.command).toBe("bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan");
+  expect(stats.active_path).toBe("text workload; apps/stats/app.tsx renders Text nodes");
+  expect(stats.samples).toBe(3);
+  expect(stats.workload).toEqual({
+    app: "stats", psp_app: "stats-main", input_script: "0:0,84:0x20,88:0",
+    cap_start: 28, cap_n: 100, framework: "solid",
+  });
+  expect(stats.sample_records).toEqual([
+    { sample: 1, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: expected.avg_work_us[0], max_work_us: expected.max_work_us[0], avg_render_us: expected.avg_render_us[0], arena_bump_bytes: expected.arena_bump_bytes[0], drawlist_checksum: expected.checksum_samples[0] },
+    { sample: 2, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: expected.avg_work_us[1], max_work_us: expected.max_work_us[1], avg_render_us: expected.avg_render_us[1], arena_bump_bytes: expected.arena_bump_bytes[1], drawlist_checksum: expected.checksum_samples[1] },
+    { sample: 3, sim_hz: 60, frames: 100, window_start: 28, window_n: 100, avg_work_us: expected.avg_work_us[2], max_work_us: expected.max_work_us[2], avg_render_us: expected.avg_render_us[2], arena_bump_bytes: expected.arena_bump_bytes[2], drawlist_checksum: expected.checksum_samples[2] },
+  ]);
+  expect(stats.metric_arrays).toEqual({
+    frames: [100, 100, 100], window_start: [28, 28, 28], window_n: [100, 100, 100],
+    avg_work_us: expected.avg_work_us, max_work_us: expected.max_work_us,
+    avg_render_us: expected.avg_render_us, arena_bump_bytes: expected.arena_bump_bytes,
+    drawlist_checksum: expected.checksum_samples,
+  });
+  expect(stats.checksum).toBe(expected.checksum);
+  expect(stats.checksum_samples).toEqual(expected.checksum_samples);
+  expect(stats.safe_arena_bytes).toBe(expected.safe_arena_bytes);
+  expect(stats.memory_scan).toEqual(expected.memory_scan);
+  expect(stats.report_path).toBe(expected.report_path);
 };
 
 const assertDiscardDecision = (value: any) => {
@@ -89,18 +117,47 @@ test("layout scratch baseline records canonical provenance and measurements", as
   expect(value.git_revision).toBe("a03eda0f22a73e2b09491e9e3efb64b6009aa251");
   expect(value.ppsspp_revision).toBe("f929a74780b34bf8c1dfa9cf549bd9eb811e41aa");
   expect(value.toolchain.bun).toBe("1.3.13");
-  expect(value.stats.workload).toEqual({
-    app: "stats", psp_app: "stats-main", input_script: "0:0,84:0x20,88:0",
-    cap_start: 28, cap_n: 100, framework: "solid",
+  expect(value.reproducibility).toEqual({
+    benchmark_git_revision: value.git_revision,
+    ppsspp: {
+      revision: value.ppsspp_revision,
+      headless_path: "/Users/quake/ppsspp-src/build/PPSSPPHeadless",
+      build_identifier: "f929a74",
+    },
+    rust: {
+      core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+      core_rustc_commit: "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+      cargo: "cargo 1.97.1 (c980f4866 2026-06-30)",
+      psp_toolchain: "nightly-2026-05-28",
+    },
+    psp_sdk: {
+      PSP_SDK: null, identifier: null,
+      note: "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available.",
+    },
+    benchmark_flags: {
+      frameworks: ["solid"], samples: 3, memory_scan: true, timeout_seconds: 60,
+      bootstrap_iterations: 0, frame_budget_us: 16667, memory_step_bytes: 262144,
+      memory_safety_floor_bytes: 524288, memory_safety_percent: 20, memory_max_bytes: 33554432,
+    },
   });
-  expect(value.stats.metric_arrays.avg_work_us).toEqual([4682, 4682, 4682]);
-  expect(value.stats.metric_arrays.avg_render_us).toEqual([581, 581, 581]);
-  expect(value.stats.checksum).toBe("c88e7bcedc5d42a5");
-  expect(value.stats.safe_arena_bytes).toBe(3670016);
-  expect(value.stats.memory_scan.safe_arena_bytes).toBe(value.stats.safe_arena_bytes);
+  assertStatsEvidence(value.stats, {
+    avg_work_us: [4682, 4682, 4682], max_work_us: [62672, 62672, 62672], avg_render_us: [581, 581, 581],
+    arena_bump_bytes: [2649904, 2649904, 2649904], checksum: "c88e7bcedc5d42a5",
+    checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"], safe_arena_bytes: 3670016,
+    memory_scan: value.stats.memory_scan, report_path: "dist/bench/ppsspp-bench-2026-09-06T02-59-52-912Z.json",
+  });
+  expect(value.stats.memory_scan).toEqual({
+    uncapped_arena_bump_bytes: 2649904, min_pass_arena_bytes: 2883584, safety_margin_bytes: 576717,
+    safe_arena_bytes: 3670016, attempt_count: 3,
+    attempts: [
+      { arena_bytes: 2883584, pass: true, avg_work_us: 4682, arena_bump_bytes: 2649904 },
+      { arena_bytes: 2621440, pass: false, error: "below uncapped high-water 2.53 MiB" },
+      { arena_bytes: 3670016, pass: true, avg_work_us: 4682, arena_bump_bytes: 2649904 },
+    ],
+  });
 });
 
-const assertCanonicalDiscardedReceipt = async (name: string, candidate: any, arenaRegression: boolean) => {
+const assertCanonicalDiscardedReceipt = async (name: string, candidate: any) => {
   const [value, baseline] = await Promise.all([
     receipt(name),
     receipt("core-layout-scratch-baseline-2026-09-06.json"),
@@ -111,14 +168,21 @@ const assertCanonicalDiscardedReceipt = async (name: string, candidate: any, are
   expect(value.git_revision).toBeNull();
   expect(value.ppsspp_revision).toBe(baseline.ppsspp_revision);
   expect(value.toolchain).toEqual(baseline.toolchain);
-  expect(value.stats).toEqual(expect.objectContaining({
-    workload: baseline.stats.workload,
-    samples: 3,
-    metric_arrays: expect.objectContaining(candidate.metric_arrays),
-    checksum: baseline.stats.checksum,
-    checksum_samples: candidate.checksum_samples,
-    safe_arena_bytes: candidate.safe_arena_bytes,
-  }));
+  expect(value.reproducibility).toEqual(candidate.reproducibility);
+  expect(value.baseline_git_revision).toBe(baseline.git_revision);
+  expect(value.candidate).toBe(candidate.name);
+  expect(value.candidate_source).toBe("temporary uncommitted patch");
+  expect(value.candidate_reproducibility).toBe("not independently reproducible");
+  expect(value.candidate_patch_artifact).toBeNull();
+  expect(value.candidate_provenance_reason).toBe(candidate.provenance_reason);
+  expect(value.candidate_files).toEqual(["engine/core/src/layout.rs", "engine/core/src/tests.rs"]);
+  expect(value.code_retained).toBe(false);
+  expect(value.candidate_git_revision).toBeNull();
+  expect(value.workload).toEqual(candidate.workload);
+  expect(value.tdd).toEqual(candidate.tdd);
+  expect(value.ownership_review).toEqual(candidate.ownership_review);
+  expect(value.candidate_test_commands).toEqual(candidate.test_commands);
+  assertStatsEvidence(value.stats, candidate.stats);
   assertNoRetainedProductionCandidate(value);
   assertBaselineComparison(value, baseline);
   expect(value.comparison.avg_work_us.candidate).toEqual(candidate.avg_work_us);
@@ -128,22 +192,47 @@ const assertCanonicalDiscardedReceipt = async (name: string, candidate: any, are
   expect(value.comparison.safe_arena_bytes.candidate).toBe(candidate.safe_arena_bytes);
   expect(value.comparison.drawlist_checksum.candidate).toEqual(candidate.checksum_samples);
   expect(value.decision.checksum_unchanged).toBe(true);
-  expect(value.decision.arena_regression).toBe(arenaRegression);
+  expect(value.decision.arena_regression).toBe(
+    mean(value.comparison.arena_bump_bytes.candidate) > mean(value.comparison.arena_bump_bytes.baseline),
+  );
   assertDiscardDecision(value);
   expect(value.candidate_report_path).toBeNull();
+  expect(value.candidate_report_status).toBe(candidate.report_status);
+  expect(value.decision.reason).toBe(candidate.reason);
+  expect(value.decision.threshold).toBe("at least 3% improvement in avg_work_us or avg_render_us");
+  expect(value.decision.safe_arena_regression).toBe(candidate.safe_arena_regression);
+  expect(value.decision.max_work_regression).toBe(candidate.max_work_regression);
 };
 
 test("layout readback scratch discarded receipt uses the committed baseline", async () => {
   await assertCanonicalDiscardedReceipt(
     "core-layout-scratch-discarded-2026-09-06.json",
     {
+      name: "Task 2 reusable layout readback slot scratch",
+      provenance_reason: "The candidate was reverted because neither timing metric met the 3% gate; its uncommitted production patch has no independently reproducible revision or artifact.",
       avg_work_us: [4679, 4679, 4679], avg_render_us: [581, 581, 581],
       max_work_us: [62640, 62640, 62640],
       arena_bump_bytes: [2649904, 2649904, 2649904], safe_arena_bytes: 3670016,
       checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"],
       metric_arrays: { avg_work_us: [4679, 4679, 4679], avg_render_us: [581, 581, 581], arena_bump_bytes: [2649904, 2649904, 2649904] },
+      checksum: "c88e7bcedc5d42a5",
+      workload: { app: "stats", psp_app: "stats-main", framework: "solid", input_script: "0:0,84:0x20,88:0", samples: 3, frames: 100, window_start: 28, window_n: 100 },
+      reproducibility: {
+        benchmark_git_revision: "a03eda0f22a73e2b09491e9e3efb64b6009aa251",
+        ppsspp: { revision: "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa", headless_path: null, build_identifier: null },
+        rust: { core_toolchain: null, core_rustc_commit: null, cargo: null, psp_toolchain: null },
+        psp_sdk: { PSP_SDK: null, identifier: null, note: null },
+        benchmark_flags: { frameworks: ["solid"], samples: 3, memory_scan: true, timeout_seconds: null, bootstrap_iterations: null, frame_budget_us: null, memory_step_bytes: null, memory_safety_floor_bytes: null, memory_safety_percent: null, memory_max_bytes: null },
+      },
+      tdd: { focused_command: "cargo test --manifest-path engine/core/Cargo.toml readback_scratch_preserves_primary_and_auxiliary_rounded_layouts", red: { result: "FAIL", reason: "missing readback scratch field/helper" }, green: { result: "PASS", tests: 1, before_benchmark_discard: true } },
+      ownership_review: undefined,
+      safe_arena_regression: undefined,
+      max_work_regression: undefined,
+      test_commands: ["cargo test --manifest-path engine/core/Cargo.toml readback_scratch_preserves_primary_and_auxiliary_rounded_layouts", "cargo test --manifest-path engine/core/Cargo.toml", "bun test tests/core-frame-receipts.test.ts", "bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan", "git diff --check"],
+      stats: { avg_work_us: [4679, 4679, 4679], max_work_us: [62640, 62640, 62640], avg_render_us: [581, 581, 581], arena_bump_bytes: [2649904, 2649904, 2649904], checksum: "c88e7bcedc5d42a5", checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"], safe_arena_bytes: 3670016, memory_scan: { uncapped_arena_bump_bytes: 2649904, min_pass_arena_bytes: 2883584, safety_margin_bytes: 576717, safe_arena_bytes: 3670016, attempt_count: 3, attempts: [{ arena_bytes: 2883584, pass: true, avg_work_us: 4679, arena_bump_bytes: 2649904 }, { arena_bytes: 2621440, pass: false, error: "below uncapped high-water 2.53 MiB" }, { arena_bytes: 3670016, pass: true, avg_work_us: 4679, arena_bump_bytes: 2649904 }] }, report_path: "dist/bench/ppsspp-bench-2026-09-06T03-15-39-526Z.json" },
+      report_status: "not retained; metrics preserved in this receipt",
+      reason: "Neither timing metric met the 3% improvement gate; the temporary candidate patch was reverted without a committed diff.",
     },
-    false,
   );
 });
 
@@ -151,12 +240,30 @@ test("layout text scratch discarded receipt uses the committed baseline", async 
   await assertCanonicalDiscardedReceipt(
     "core-layout-scratch-task3-discarded-2026-09-06.json",
     {
+      name: "Task 3 reusable layout text-run scratch",
+      provenance_reason: "The candidate was safe by ownership inspection but was discarded because neither timing metric met the 3% gate and the reusable String increased arena high-water by 32 bytes. The uncommitted production patch and test were reverted, so no independently reproducible candidate revision or patch artifact exists.",
       avg_work_us: [4682, 4682, 4682], avg_render_us: [581, 581, 581],
       max_work_us: [62655, 62655, 62655],
       arena_bump_bytes: [2649936, 2649936, 2649936], safe_arena_bytes: 3670016,
       checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"],
       metric_arrays: { avg_work_us: [4682, 4682, 4682], avg_render_us: [581, 581, 581], arena_bump_bytes: [2649936, 2649936, 2649936] },
+      checksum: "c88e7bcedc5d42a5",
+      workload: { app: "stats", psp_app: "stats-main", framework: "solid", input_script: "0:0,84:0x20,88:0", samples: 3, frames: 100, window_start: 28, window_n: 100 },
+      reproducibility: {
+        benchmark_git_revision: "810a9b1e202e606e0a4ef0fc0189dcb1046b4ccb",
+        ppsspp: { revision: "f929a74780b34bf8c1dfa9cf549bd9eb811e41aa", headless_path: "/Users/quake/ppsspp-src/build/PPSSPPHeadless", build_identifier: "f929a74" },
+        rust: { core_toolchain: "rustc 1.97.1 (8bab26f4f 2026-07-14)", core_rustc_commit: "8bab26f4f68e0e26f0bb7960be334d5b520ea452", cargo: "cargo 1.97.1 (c980f4866 2026-06-30)", psp_toolchain: "nightly-2026-05-28" },
+        psp_sdk: { PSP_SDK: null, identifier: null, note: "PSP_SDK and PSP_TOOLCHAIN were unset; no PSP SDK executable identifier was available." },
+        benchmark_flags: { frameworks: ["solid"], samples: 3, memory_scan: true, timeout_seconds: 60, bootstrap_iterations: 0, frame_budget_us: 16667, memory_step_bytes: 262144, memory_safety_floor_bytes: 524288, memory_safety_percent: 20, memory_max_bytes: 33554432 },
+      },
+      tdd: { focused_command: "cargo test --manifest-path engine/core/Cargo.toml repeated_text_relayouts_preserve_measurement_provider_and_drawlist", red: { result: "FAIL", reason: "missing LayoutEngine::run_scratch field" }, green: { result: "PASS", tests: 1, before_benchmark_discard: true }, test_behavior: ["measured layout width and height remained (30.0, 12.0)", "text_native remained true", "DrawList checksum remained identical across three repeated relayouts"] },
+      ownership_review: { measure_ctx_owns_measurement_data: true, taffy_context_borrows_scratch: false, rejected_constraints: [], decision: "SAFE" },
+      safe_arena_regression: false,
+      max_work_regression: false,
+      test_commands: ["cargo test --manifest-path engine/core/Cargo.toml repeated_text_relayouts_preserve_measurement_provider_and_drawlist", "cargo test --manifest-path engine/core/Cargo.toml text -- --nocapture", "cargo test --manifest-path engine/core/Cargo.toml", "bun test tests/core-frame-receipts.test.ts", "bun tools/bench-ppsspp.ts --apps=stats --samples=3 --memory-scan", "git diff --check"],
+      stats: { avg_work_us: [4682, 4682, 4682], max_work_us: [62655, 62655, 62655], avg_render_us: [581, 581, 581], arena_bump_bytes: [2649936, 2649936, 2649936], checksum: "c88e7bcedc5d42a5", checksum_samples: ["c88e7bcedc5d42a5", "c88e7bcedc5d42a5", "c88e7bcedc5d42a5"], safe_arena_bytes: 3670016, memory_scan: { uncapped_arena_bump_bytes: 2649936, min_pass_arena_bytes: 2883584, safety_margin_bytes: 576717, safe_arena_bytes: 3670016, attempt_count: 3, attempts: [{ arena_bytes: 2883584, pass: true, avg_work_us: 4682, arena_bump_bytes: 2649936 }, { arena_bytes: 2621440, pass: false, error: "below uncapped high-water 2.53 MiB" }, { arena_bytes: 3670016, pass: true, avg_work_us: 4682, arena_bump_bytes: 2649936 }] }, report_path: "dist/bench/ppsspp-bench-2026-09-06T03-31-57-880Z.json" },
+      report_status: "unavailable; measured values are preserved in this receipt",
+      reason: "Neither timing metric met the 3% improvement gate; the drawlist checksum and safe arena were unchanged, but arena high-water increased from 2649904 to 2649936 bytes. The temporary candidate patch was reverted without a committed diff.",
     },
-    true,
   );
 });
