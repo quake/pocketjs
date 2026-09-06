@@ -180,7 +180,11 @@ function parseVariantRecord(output: string): VariantRecord {
     const value = Number(record[field]);
     expect(Number.isFinite(value)).toBe(true);
     expect(Number.isInteger(value)).toBe(true);
-    expect(value).toBeGreaterThanOrEqual(0);
+    if (field === "measured_ticks") {
+      expect(value).toBeGreaterThan(0);
+    } else {
+      expect(value).toBeGreaterThanOrEqual(0);
+    }
   }
 
   if (record.variant === "no_draw_control") {
@@ -193,7 +197,10 @@ function parseVariantRecord(output: string): VariantRecord {
 }
 
 function parseVariantMatrix(output: string): Map<Variant, VariantRecord> {
-  const records = output.split("\n\n").map(parseVariantRecord);
+  const normalized = output.endsWith("\n")
+    ? output.slice(0, -1)
+    : output;
+  const records = normalized.split("\n\n").map(parseVariantRecord);
   const parsed = new Map<Variant, VariantRecord>();
   for (const record of records) {
     expect(parsed.has(record.variant as Variant)).toBe(false);
@@ -271,15 +278,24 @@ const VALID_VARIANT_RECORDS = [
 ] as const;
 
 const VALID_VARIANT_MATRIX = VALID_VARIANT_RECORDS.join("\n\n");
+const ZERO_MEASURED_TICKS_RECORD = VALID_VARIANT_RECORDS[0]!.replace(
+  "measured_ticks=100",
+  "measured_ticks=0",
+);
 
 test("variant parser accepts the complete differential matrix", () => {
-  expect(parseVariantMatrix(VALID_VARIANT_MATRIX).size).toBe(5);
+  expect(parseVariantMatrix(`${VALID_VARIANT_MATRIX}\n`).size).toBe(5);
 });
 
 test("variant parser rejects unknown variants and malformed records", () => {
   expect(() =>
     parseVariantRecord(
       VALID_VARIANT_RECORDS[0]!.replace("variant=full", "variant=other"),
+    ),
+  ).toThrow();
+  expect(() =>
+    parseVariantRecord(
+      VALID_VARIANT_RECORDS[0]!.replace("nodes=120", "unknown=120"),
     ),
   ).toThrow();
   expect(() =>
@@ -303,6 +319,10 @@ test("variant parser rejects unknown variants and malformed records", () => {
       VALID_VARIANT_RECORDS[0]!.replace("nodes=120", "nodes="),
     ),
   ).toThrow();
+});
+
+test("variant parser rejects zero measured ticks", () => {
+  expect(() => parseVariantRecord(ZERO_MEASURED_TICKS_RECORD)).toThrow();
 });
 
 test("variant parser enforces drawing checksums and control checksum", () => {
@@ -345,7 +365,17 @@ test(
       .cwd(ROOT)
       .quiet()
       .text();
-    parseVariantMatrix(output);
+    const records = parseVariantMatrix(output);
+    const full = records.get("full");
+    expect(full).toBeDefined();
+    expect(full).toMatchObject({
+      nodes: "99",
+      measured_ticks: "60",
+      structural_relayouts: "16",
+      allocation_count: "9336",
+      total_allocated_bytes: "6195449",
+      drawlist_checksum: "cc6a0b00efdba151",
+    });
   },
 );
 
