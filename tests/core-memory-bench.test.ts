@@ -88,9 +88,11 @@ function parseVariantRecord(output: string): VariantRecord {
 }
 
 function parseVariantMatrix(output: string): Map<Variant, VariantRecord> {
-  const normalized = output.endsWith("\n")
-    ? output.slice(0, -1)
-    : output;
+  const assetMarker = "\n\nasset-workload\n";
+  const matrixOutput = output.split(assetMarker, 1)[0]!;
+  const normalized = matrixOutput.endsWith("\n")
+    ? matrixOutput.slice(0, -1)
+    : matrixOutput;
   const records = normalized.split("\n\n").map(parseVariantRecord);
   const parsed = new Map<Variant, VariantRecord>();
   for (const record of records) {
@@ -325,5 +327,10 @@ test(
       .quiet()
       .text();
     expect(parseVariantMatrix(output).size).toBe(VARIANTS.length);
+    const assetSection = output.split("\n\nasset-workload\n")[1];
+    expect(assetSection).toBeDefined();
+    expect(assetSection).toMatch(
+      /^asset-workload peak_requested_bytes=\d+ final_requested_bytes=\d+ allocation_count=\d+ total_allocated_bytes=\d+ resource_checksum=[0-9a-f]{16}\n?$/,
+    );
   },
 );

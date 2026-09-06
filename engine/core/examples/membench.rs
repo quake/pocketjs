@@ -572,10 +572,6 @@ fn hash_draw(words: &[u32], checksum: &mut u64) {
     }
 }
 
-fn nanos_to_micros_ceil(nanoseconds: u128) -> u128 {
-    nanoseconds.div_ceil(1_000)
-}
-
 fn warmup_draw(
     ui: &mut Ui,
     checksum: &mut u64,
@@ -878,8 +874,9 @@ fn run_variant(variant: Variant) -> VariantReceipt {
     // semantics. The stage fields above are workload-phase proxies instead.
     // Aggregate in nanoseconds before converting, so short ticks are not
     // rounded to zero before average/max profiling.
-    let avg_layout_us = nanos_to_micros_ceil(total_ns / timings.len() as u128);
-    let max_layout_us = nanos_to_micros_ceil(max_ns);
+    let measured_ticks = timings.len() as u128;
+    let avg_layout_us = total_ns.div_ceil(measured_ticks * 1_000);
+    let max_layout_us = max_ns.div_ceil(1_000);
     profile.avg_tick_us = avg_layout_us;
     profile.max_tick_us = max_layout_us;
     let receipt = VariantReceipt {
@@ -915,8 +912,6 @@ fn run_variant(variant: Variant) -> VariantReceipt {
 }
 
 fn main() {
-    const MATRIX_MODE: bool = true;
-
     for (index, variant) in [
         Variant::Full,
         Variant::StyleOnly,
@@ -933,10 +928,9 @@ fn main() {
         print_variant_record(&run_variant(variant));
     }
 
-    // Asset receipts retain their legacy behavior outside matrix mode. The
-    // matrix must remain exactly five 10-field records, so the opt-in asset
-    // workload is intentionally disabled while this executable is in matrix mode.
-    if !MATRIX_MODE && std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
+    // Keep the opt-in asset receipt after a separate section marker so matrix
+    // consumers can intentionally parse only the five variant records.
+    if std::env::var("POCKETJS_ASSET_WORKLOAD").as_deref() == Ok("1") {
         let asset_fixture = AssetInputs::new();
         let asset_inputs = asset_fixture.inputs();
         const ASSET_REPETITIONS: usize = 3;
@@ -964,6 +958,7 @@ fn main() {
         }
         let (asset_peak, asset_final, asset_count, asset_total, asset_checksum) =
             asset_record.unwrap();
+        println!("\nasset-workload");
         println!(
             "{}",
             format_asset_record(
