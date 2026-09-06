@@ -500,10 +500,10 @@ fn timing_capacity() -> usize {
 
 #[derive(Default)]
 struct StageProfile {
-    tick_us: u128,
-    draw_us: u128,
-    layout_us: u128,
-    animation_us: u128,
+    tick_ns: u128,
+    draw_ns: u128,
+    layout_ns: u128,
+    animation_ns: u128,
     allocation_count: usize,
     total_allocated_bytes: usize,
 }
@@ -544,32 +544,32 @@ fn draw_and_hash(ui: &mut Ui, checksum: &mut u64) {
 fn tick_and_measure(
     ui: &mut Ui,
     checksum: &mut u64,
-    total_us: &mut u128,
-    max_us: &mut u128,
+    total_ns: &mut u128,
+    max_ns: &mut u128,
     profile: &mut StageProfile,
     phase: WorkloadPhase,
 ) {
     let tick_started = Instant::now();
     ui.tick();
-    let tick_us = tick_started.elapsed().as_micros();
-    *total_us += tick_us;
-    *max_us = (*max_us).max(tick_us);
-    profile.tick_us += tick_us;
+    let tick_ns = tick_started.elapsed().as_nanos();
+    *total_ns += tick_ns;
+    *max_ns = (*max_ns).max(tick_ns);
+    profile.tick_ns += tick_ns;
     // These are workload-phase proxies, not internal function timings.
     match phase {
-        WorkloadPhase::Animation => profile.animation_us += tick_us,
-        WorkloadPhase::Layout => profile.layout_us += tick_us,
+        WorkloadPhase::Animation => profile.animation_ns += tick_ns,
+        WorkloadPhase::Layout => profile.layout_ns += tick_ns,
     }
 
     let draw_started = Instant::now();
     let words = &ui.draw().words;
-    let draw_us = draw_started.elapsed().as_micros();
+    let draw_ns = draw_started.elapsed().as_nanos();
     assert!(
         words.iter().any(|&word| word == spec::draw_op::GLYPH_RUN),
         "benchmark draw must emit atlas-backed glyphs"
     );
     hash_draw(words, checksum);
-    profile.draw_us += draw_us;
+    profile.draw_ns += draw_ns;
 }
 
 fn main() {
@@ -614,8 +614,8 @@ fn main() {
 
     begin_measurement();
     let mut checksum = 0xcbf29ce484222325;
-    let mut total_us = 0u128;
-    let mut max_us = 0u128;
+    let mut total_ns = 0u128;
+    let mut max_ns = 0u128;
     let mut profile = StageProfile::default();
 
     // Phase 1: initial tree and resources.
@@ -651,8 +651,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_us,
-            &mut max_us,
+            &mut total_ns,
+            &mut max_ns,
             &mut profile,
             WorkloadPhase::Animation,
         );
@@ -676,8 +676,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_us,
-            &mut max_us,
+            &mut total_ns,
+            &mut max_ns,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -701,8 +701,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_us,
-            &mut max_us,
+            &mut total_ns,
+            &mut max_ns,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -721,8 +721,8 @@ fn main() {
         tick_and_measure(
             &mut ui,
             &mut checksum,
-            &mut total_us,
-            &mut max_us,
+            &mut total_ns,
+            &mut max_ns,
             &mut profile,
             WorkloadPhase::Layout,
         );
@@ -731,19 +731,30 @@ fn main() {
 
     let nodes = 1 + 1 + 1 + 32 * 3;
     end_measurement();
+    let (stage_allocation_count, stage_total_allocated_bytes) = (
+        COUNT.load(Ordering::Relaxed),
+        TOTAL.load(Ordering::Relaxed),
+    );
+    profile.allocation_count = stage_allocation_count;
+    profile.total_allocated_bytes = stage_total_allocated_bytes;
     let allocation_count = COUNT.load(Ordering::Relaxed);
     let total_allocated_bytes = TOTAL.load(Ordering::Relaxed);
-    profile.allocation_count = allocation_count;
-    profile.total_allocated_bytes = total_allocated_bytes;
     assert_eq!(profile.allocation_count, allocation_count);
     assert_eq!(profile.total_allocated_bytes, total_allocated_bytes);
-    assert_eq!(profile.layout_us + profile.animation_us, profile.tick_us);
-    // Ui::tick includes animation bookkeeping, so this is a tick/layout proxy.
-    let avg_layout_us = total_us / timings.len() as u128;
-    println!("stage_tick_us={}", profile.tick_us);
-    println!("stage_draw_us={}", profile.draw_us);
-    println!("stage_layout_us={}", profile.layout_us);
-    println!("stage_animation_us={}", profile.animation_us);
+    // These are workload-phase proxies, not internal function timings. Convert
+    // the aggregate nanosecond totals once so short animation ticks contribute.
+    assert_eq!(profile.layout_ns + profile.animation_ns, profile.tick_ns);
+    let stage_tick_us = profile.tick_ns / 1_000;
+    let stage_animation_us = profile.animation_ns / 1_000;
+    let stage_layout_us = stage_tick_us - stage_animation_us;
+    assert_eq!(stage_layout_us + stage_animation_us, stage_tick_us);
+    let stage_draw_us = profile.draw_ns / 1_000;
+    let avg_layout_us = (total_ns / timings.len() as u128) / 1_000;
+    let max_layout_us = max_ns / 1_000;
+    println!("stage_tick_us={stage_tick_us}");
+    println!("stage_draw_us={stage_draw_us}");
+    println!("stage_layout_us={stage_layout_us}");
+    println!("stage_animation_us={stage_animation_us}");
     println!("stage_allocation_count={}", profile.allocation_count);
     println!(
         "stage_total_allocated_bytes={}",
@@ -754,7 +765,7 @@ fn main() {
     println!("allocation_count={allocation_count}");
     println!("total_allocated_bytes={total_allocated_bytes}");
     println!("avg_layout_us={avg_layout_us}");
-    println!("max_layout_us={max_us}");
+    println!("max_layout_us={max_layout_us}");
     println!("nodes={nodes}");
     println!("structural_relayouts={structural_relayouts}");
     println!("text_mode=atlas");
