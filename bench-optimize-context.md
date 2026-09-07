@@ -29,6 +29,17 @@ taffy-tree rebuild path** as the dominant per-event cost:
   checksum `c88e7bcedc5d42a5`. Keep requires >=3% work or render improvement,
   unchanged checksum, no arena/safe-arena regression, receipt + integrity tests.
 
+## Scope and Constraints
+
+- Production changes are limited to `engine/core`.
+- PSP 3% gate (avg_work_us or avg_render_us, checksum-exact, no arena
+  regression) is the final acceptance for any retained candidate.
+- **User policy (2026-09-07): candidates must minimize architectural change.**
+  Single-function/single-file, low-blast-radius changes only. The incremental
+  taffy sync (89% membench win, checksum-exact, PSP 2.48%) was discarded
+  because it rewired the relayout lifecycle plus five call sites — too complex
+  despite passing every automatic gate.
+
 ## What Works
 
 - Stage/matrix profiling in `membench` (5 variants, release mode ~2s/run,
@@ -43,30 +54,32 @@ taffy-tree rebuild path** as the dominant per-event cost:
   Allocation-count reduction alone never moved PSP work time.
 - 3D collection scratch: unmeasurable (`motions` workload absent from runner
   registry), rejected without production code.
+- Incremental taffy sync (commit 7cece37, reverted 2026-09-07): technically
+  successful — checksum-exact, membench structural 160→17us/tick (median-of-3),
+  PSP avg_work 4682→4566 (2.48%), max_work −18.6%, arena +5.5KB. Discarded:
+  PSP below the 3% gate AND user rejected the blast radius (relayout lifecycle
+  rewrite + lib.rs hooks in destroy/insert/remove/set_text + asset hooks).
+  Lesson: the mechanism is proven but any retry is banned by the
+  minimal-architecture policy; do not re-propose it in this form.
 - Lesson: micro-deallocation of tiny temporaries is invisible against the
   taffy rebuild itself; candidates must attack the rebuild's actual work
   (tree clear + full node/style re-creation + re-measure), not the wrappers.
 
-## Ideas Backlog
+## Ideas Backlog (small-blast-radius only, per user policy)
 
-1. **Incremental taffy sync for structure-dirty relayouts** — reuse the live
-   taffy tree: map surviving slots to existing NodeIds, attach/detach only
-   changed subtrees instead of `clear()` + full rebuild. Largest expected win
-   (churn rounds rebuild ~100 nodes for 4-node changes); highest complexity
-   (ownership, `text_native` record, excluded empty runs, primary/aux roots).
-2. **TaffyTree capacity reuse / node pool** — check whether `taffy.clear()`
-   releases node storage; if so, replace with capacity-preserving reset or
-   `TaffyTree::with_capacity` reuse. Moderate win, low risk.
-3. **Cache `to_taffy` conversions** — rebuild re-resolves and re-maps styles
-   for every node; cache per-slot taffy::Style keyed by resolved-style
-   revision. Moderate.
-4. **Avoid re-shaping unchanged text on rebuild** — `MeasureCtx::shaped`
-   re-shapes every text leaf each rebuild even when run text/font unchanged;
-   reuse the previous measured size keyed by (run, slot, tracking,
-   line_height, native). Text shaping was flagged as the expensive half of
-   layout on PSP.
-5. **Pre-size `kids`/collection vectors** — likely noise (see What Doesn't
-   Work); only as byproduct of other changes.
+1. **Skip duplicate text shaping** — measure_ctx/restyle re-shapes a text run
+   even when (run bytes, font slot, tracking, line_height, native) are
+   unchanged; memoize the last shaped input inside the text leaf's layout
+   state. Touches `layout.rs` (MeasureCtx) only. Text shaping is flagged as
+   the expensive half of layout on the PSP.
+2. **Fast-path unchanged style resolution** — style::resolve runs per node per
+   relayout AND per node per draw walk; check whether the draw walk (not
+   layout) dominates PSP work before building any cache. Investigate first
+   with a differential: if draw-period cost dominates stats' avg_work_us,
+   resolve caching pays; else drop.
+3. **Taffy capacity reuse** — verify whether taffy 0.11 `clear()` retains
+   storage capacity (slotmap clear likely does); if yes this is a no-op — skip.
+4. Pre-sized scratch vectors — proven noise; only as byproducts.
 
 ## Approach Categories Tried
 
