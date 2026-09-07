@@ -104,7 +104,7 @@ this campaign. Do not restart the loop without a constraint change.
 |----------|----------|------|------------|
 | scratch-reuse (small Vecs/Strings) | 4 | 0 | 2026-09-06 |
 | text-placement cache | 1 | 0 | 2026-09-07 |
-| codegen (const-default, resolve_z, glyph loop) | 3 | 1 (0% simplification) | 2026-09-07 |
+| codegen/emission (5 PSP A/B rounds) | 6 | 1 (0% simplification) | 2026-09-07 |
 | algorithm (taffy sync) | 1 | 0 (veto: complexity) | 2026-09-07 |
 | 3D/unmeasurable | 1 | 0 | 2026-09-06 |
 | profiling instrumentation | 2 | kept (diagnostic) | 2026-09-07 |

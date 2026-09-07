@@ -56,3 +56,13 @@ structural taffy rebuild ~160-228µs/tick vs text updates ~570-670 vs
 style-only ~1µs; draw construction ~290-385µs/draw desktop. PSP side: tick 385
 / draw 2810 split from the raw reports drove the paint-walk experiments
 (#7-#10).
+
+## Post-archive continuation (2026-09-07)
+
+Two further emission-tier codegen rounds on PSP (A/B/A, sd=0 each):
+- translation-only fast path in per-glyph affine: 4684/4682/4684 — zero.
+- glyph-pair `extend_from_slice`: 4771/4682/4771 — +1.9% regression (two inlined
+  pushes beat the extend call).
+The constrained candidate space is now exhausted twice over; every mechanism-
+motivated micro inside engine/core-only + minimal-architecture is measured
+negative, neutral, or below the 3% gate (~12 PSP-verified experiments total).
