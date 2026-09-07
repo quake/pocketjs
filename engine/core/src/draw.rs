@@ -639,8 +639,7 @@ fn for_children_in_paint_order(
         }
     }
     if !needs_sort {
-        for i in 0..node.children.len() {
-            let cid = tree.slots[slot as usize].children[i];
+        for &cid in &node.children {
             if let Some(cs) = tree.resolve(cid) {
                 f(cs);
             }
