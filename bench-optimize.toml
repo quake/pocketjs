@@ -1,0 +1,17 @@
+[benchmark]
+command = "for i in 1 2 3; do cargo run --release --manifest-path engine/core/Cargo.toml --example membench --quiet 2>/dev/null | awk '/^variant=structure_no_text$/{f=1} f&&/^avg_tick_us=/{sub(\"avg_tick_us=\",\"\");print;f=0}'; done | sort -n | sed -n '2p'"
+metric_pattern = "^(\\d+)$"
+metric_name = "structural_avg_tick_us_median3"
+direction = "lower"
+timeout_seconds = 600
+
+[scope]
+editable = ["engine/core/src"]
+readonly = ["engine/core/examples", "engine/core/tests", "tests", "tools", "hosts", "docs", "framework", "site", "vapor"]
+branch_prefix = "bench-optimize"
+
+[experiment]
+tag = "sep07"
+max_consecutive_fails = 3
+baseline_runs = 3
+variance_threshold_pct = 5.0
