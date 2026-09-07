@@ -84,24 +84,27 @@ taffy-tree rebuild path** as the dominant per-event cost:
 
 ## Ideas Backlog (small-blast-radius only, per user policy)
 
-1. **Skip duplicate text shaping** — measure_ctx/restyle re-shapes a text run
-   even when (run bytes, font slot, tracking, line_height, native) are
-   unchanged; memoize the last shaped input inside the text leaf's layout
-   state. Touches `layout.rs` (MeasureCtx) only. Text shaping is flagged as
-   the expensive half of layout on the PSP.
-2. **Fast-path unchanged style resolution** — style::resolve runs per node per
-   relayout AND per node per draw walk; check whether the draw walk (not
-   layout) dominates PSP work before building any cache. Investigate first
-   with a differential: if draw-period cost dominates stats' avg_work_us,
-   resolve caching pays; else drop.
-3. **Taffy capacity reuse** — verify whether taffy 0.11 `clear()` retains
-   storage capacity (slotmap clear likely does); if yes this is a no-op — skip.
-4. Pre-sized scratch vectors — proven noise; only as byproducts.
+**Loop exhausted (2026-09-07):** after 9 PSP-verified experiments, every
+candidate class inside the constraints (engine/core only × minimal
+architecture × 3% stats gate × checksum-exact) is measured negative, neutral,
+or below the gate:
+allocation trims ×4 (0.02-0.26%), taffy incremental sync (2.48% + complexity
+veto), text placement cache (PSP regression), const-default Resolved (+14.9%),
+resolve_z parse-time precompute (+0.17% but added complexity), translation
+fast path in glyph emission (0%), paint-order rewrite (0%, kept as
+simplification). The per-node paint walk on MIPS is at its no-state floor:
+`resolve` inline stores, `resolve_z` record lookups, and the per-glyph affine
+loop are already past every measured micro-lever. Any further gain requires
+cross-frame state or relayout-lifecycle changes, which the user rejected for
+this campaign. Do not restart the loop without a constraint change.
 
 ## Approach Categories Tried
 
 | Category | Attempts | Kept | Last Tried |
 |----------|----------|------|------------|
 | scratch-reuse (small Vecs/Strings) | 4 | 0 | 2026-09-06 |
+| text-placement cache | 1 | 0 | 2026-09-07 |
+| codegen (const-default, resolve_z, glyph loop) | 3 | 1 (0% simplification) | 2026-09-07 |
+| algorithm (taffy sync) | 1 | 0 (veto: complexity) | 2026-09-07 |
 | 3D/unmeasurable | 1 | 0 | 2026-09-06 |
 | profiling instrumentation | 2 | kept (diagnostic) | 2026-09-07 |
