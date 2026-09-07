@@ -61,6 +61,15 @@ taffy-tree rebuild path** as the dominant per-event cost:
   rewrite + lib.rs hooks in destroy/insert/remove/set_text + asset hooks).
   Lesson: the mechanism is proven but any retry is banned by the
   minimal-architecture policy; do not re-propose it in this form.
+- Glyph placement cache at relayout time (commit b30ea9e, reverted
+  2026-09-07): membench-paired screen showed draw −35-38% across variants, but
+  PSP showed ZERO avg_draw gain (2810→2811) while avg_tick grew +173us/frame
+  (readback re-placement every relayout). PSP stats relayouts effectively every
+  frame, and placement was a negligible share of PSP draw time (MIPS paint
+  walk dominates per-node draw cost). Net avg_work +1.2% — discarded. Lesson:
+  membench draw-share deltas do NOT transfer to PSP's avg_draw composition;
+  pre-screen with the PSP `avg_tick_us`/`avg_draw_us` split (already in every
+  raw report) before investing in a candidate.
 - Lesson: micro-deallocation of tiny temporaries is invisible against the
   taffy rebuild itself; candidates must attack the rebuild's actual work
   (tree clear + full node/style re-creation + re-measure), not the wrappers.
