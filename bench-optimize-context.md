@@ -54,6 +54,14 @@ taffy-tree rebuild path** as the dominant per-event cost:
   Allocation-count reduction alone never moved PSP work time.
 - 3D collection scratch: unmeasurable (`motions` workload absent from runner
   registry), rejected without production code.
+- Const-block `Resolved::default` on PSP (reverted 2026-09-07): x86 paired
+  screen showed ZERO delta; PSP showed avg_work +14.9% (4682→5378, draw +670,
+  tick +135) — field-by-field inline stores beat a roData block copy on the
+  in-order MIPS core, back-to-back reproduced with sd=0. Lesson: ONLY the PSP
+  run can adjudicate any codegen-adjacent micro change; the desktop screen is
+  structurally blind to MIPS codegen effects. Any further paint-walk/
+  resolve-class experiment must be PSP-verified directly (the membench screen
+  cannot gate these).
 - Incremental taffy sync (commit 7cece37, reverted 2026-09-07): technically
   successful — checksum-exact, membench structural 160→17us/tick (median-of-3),
   PSP avg_work 4682→4566 (2.48%), max_work −18.6%, arena +5.5KB. Discarded:
